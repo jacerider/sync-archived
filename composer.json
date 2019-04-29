@@ -1,0 +1,14 @@
+{
+  "name": "drupal/sync",
+  "type": "drupal-module",
+  "description": "Data migration suite.",
+  "keywords": ["Drupal"],
+  "license": "GPL-2.0+",
+  "homepage": "https://www.drupal.org/project/sync",
+  "minimum-stability": "dev",
+  "support": {
+    "issues": "https://www.drupal.org/project/issues/sync",
+    "source": "http://cgit.drupalcode.org/sync"
+  },
+  "require": { }
+}

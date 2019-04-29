@@ -1,0 +1,7 @@
+sync.sync:
+  path: '/admin/sync'
+  defaults:
+    _form: '\Drupal\sync\Form\SyncForm'
+    _title: 'Sync'
+  requirements:
+    _permission: 'access sync overview'

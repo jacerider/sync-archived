@@ -1,0 +1,83 @@
+<?php
+
+/**
+ * @file
+ * Contains install and update functions for sync.
+ */
+
+/**
+ * Implements hook_schema().
+ *
+ * Defines the database tables used by this module.
+ *
+ * @see hook_schema()
+ *
+ * @ingroup sync
+ */
+function sync_schema() {
+  $schema['sync'] = [
+    'description' => 'Stores synced entities.',
+    'fields' => [
+      'id' => [
+        'type' => 'varchar_ascii',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => "The sync id.",
+      ],
+      'entity_type' => [
+        'type' => 'varchar_ascii',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The entity type.',
+      ],
+      'entity_id' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => "The entity id.",
+      ],
+      'locked' => [
+        'description' => 'Boolean indicating whether the entity is locked and should not be synced.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => 0,
+        'size' => 'tiny',
+      ],
+    ],
+    'primary key' => ['id', 'entity_type'],
+    'indexes' => [
+      'entity_type' => ['entity_type'],
+      'entity_id' => ['entity_id'],
+    ],
+  ];
+  $schema['sync_data'] = [
+    'description' => 'Stores sync data.',
+    'fields' => [
+      'id' => [
+        'type' => 'varchar_ascii',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => "The sync id.",
+      ],
+      'group' => [
+        'type' => 'varchar_ascii',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The sync group',
+      ],
+      'changed' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Unix timestamp of when the entity was last updated',
+      ],
+    ],
+    'primary key' => ['id', 'group'],
+  ];
+  return $schema;
+}

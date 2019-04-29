@@ -1,0 +1,47 @@
+<?php
+
+/**
+ * @file
+ * Contains sync.module.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\Core\Entity\EntityInterface;
+
+/**
+ * Implements hook_help().
+ */
+function sync_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    // Main module help for the sync module.
+    case 'help.page.sync':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('Data migration suite.') . '</p>';
+      return $output;
+
+    default:
+  }
+}
+
+/**
+ * Implements hook_cron().
+ */
+function sync_cron() {
+  $manager = \Drupal::service('plugin.manager.sync_resource');
+  foreach ($manager->getForCron() as $instance) {
+    /* @var \Drupal\sync\Plugin\SyncResourceInterface $instance */
+    $instance->run();
+    $manager->setLastRun($instance->getPluginDefinition());
+  }
+}
+
+/**
+ * Implements hook_entity_delete().
+ */
+function sync_entity_delete(EntityInterface $entity) {
+  \Drupal::service('sync.storage')->deleteByProperties([
+    'entity_id' => $entity->id(),
+    'entity_type' => $entity->getEntityTypeId(),
+  ]);
+}
