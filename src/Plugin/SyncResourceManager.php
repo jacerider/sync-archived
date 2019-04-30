@@ -29,6 +29,7 @@ class SyncResourceManager extends DefaultPluginManager {
     $this->defaults = [
       'status' => 1,
       'entity_type' => 'node',
+      'bundle' => '',
       'cron' => '00:00',
       'day' => 'mon,tue,wed,thu,fri',
       'cleanup' => TRUE,

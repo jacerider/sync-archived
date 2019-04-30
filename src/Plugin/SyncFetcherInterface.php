@@ -9,7 +9,9 @@ use Drupal\Component\Plugin\PluginInspectionInterface;
  */
 interface SyncFetcherInterface extends PluginInspectionInterface {
 
-
-  // Add get/set methods for your plugin type here.
+  /**
+   * Build the request.
+   */
+  public function fetch();
 
 }

@@ -163,7 +163,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * {@inheritdoc}
    */
-  public function getBundle() {
+  public function getBundle(array $data) {
     $definition = $this->getPluginDefinition();
     return $definition['bundle'];
   }
@@ -268,16 +268,19 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         }
       }
       catch (SyncHaltException $e) {
+        drupal_set_message($e->getMessage(), 'error');
         $queue->deleteItem($item);
         $context['results']['skip']++;
       }
       catch (SuspendQueueException $e) {
+        drupal_set_message($e->getMessage(), 'error');
         $queue->deleteItem($item);
         if (empty($item->data['no_count'])) {
           $context['results']['fail']++;
         }
       }
       catch (\Exception $e) {
+        drupal_set_message($e->getMessage(), 'error');
         $queue->deleteItem($item);
         watchdog_exception('sync', $e);
         if (empty($item->data['no_count'])) {
@@ -332,6 +335,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $this->logger->notice('[Sync Data: %plugin_label] GET: %entity_type:%bundle.', $this->getContext());
       $data = $fetcher->fetch();
       $data = $parser->parse($data);
+      $data = $this->filter($data);
       return $data;
     }
     catch (\Exception $e) {
@@ -345,8 +349,15 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * {@inheritdoc}
    */
+  public function filter(array $data) {
+    return $data;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function loadEntity(array $data) {
-    return $this->syncEntityProvider->getOrNew($this->id($data), $this->getEntityType(), $this->getBundle(), [], $this->getGroup());
+    return $this->syncEntityProvider->getOrNew($this->id($data), $this->getEntityType(), $this->getBundle($data), [], $this->getGroup());
   }
 
   /**
@@ -362,7 +373,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       if ($entity) {
         if ($this->syncAccess($entity)) {
           $this->processItem($entity, $data);
-          $success = $this->save($id, $entity);
+          $success = $this->save($id, $entity, $data);
           switch ($success) {
             case SAVED_NEW:
               $this->logger->notice('[Sync Item: %plugin_label] NEW: %id for %entity_type:%bundle', $context);
@@ -422,12 +433,14 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    *   The sync id.
    * @param \Drupal\Core\Entity\ContentEntityInterface $entity
    *   The entity to process.
+   * @param array $data
+   *   The data provided from the Unionware API for a single item.
    *
    * @return bool
    *   A bool representing success.
    */
-  protected function save($id, ContentEntityInterface $entity) {
-    return $this->syncEntityProvider->save($id, $entity, $this->getGroup());
+  protected function save($id, ContentEntityInterface $entity, array $data) {
+    return $entity->save();
   }
 
   /**
@@ -545,6 +558,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    */
   public function debug() {
     $data = $this->getData();
+    if (count($data) > 100) {
+      $data = array_slice($data, 0, 100);
+    }
     if (\Drupal::service('module_handler')->moduleExists('kint')) {
       ksm($data);
     }
@@ -562,7 +578,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       '%plugin_id' => $this->getPluginId(),
       '%plugin_label' => $this->label(),
       '%entity_type' => $this->getEntityType(),
-      '%bundle' => $this->getBundle(),
+      '%bundle' => $this->getBundle($data),
     ];
     if (!empty($data)) {
       $context += [

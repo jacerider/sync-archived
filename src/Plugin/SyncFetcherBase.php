@@ -20,10 +20,6 @@ abstract class SyncFetcherBase extends PluginBase implements SyncFetcherInterfac
    *   The plugin implementation definition.
    */
   public function __construct(array $configuration, $plugin_id, $plugin_definition) {
-    $configuration += [
-      'url' => '',
-      'query' => [],
-    ];
     parent::__construct($configuration, $plugin_id, $plugin_definition);
   }
 

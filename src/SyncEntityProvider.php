@@ -64,33 +64,18 @@ class SyncEntityProvider implements SyncEntityProviderInterface {
       $results = $this->entityTypeManager->getStorage($entity_type)->loadByProperties($values);
       if (!empty($results)) {
         $entity = reset($results);
-        // Create sync record so it can be retrieved faster next time.
-        $this->syncStorage->save($id, $entity, FALSE, $group);
       }
     }
     if ($entity) {
       if ($entity instanceof EntityChangedInterface) {
         $entity->setChangedTime(\Drupal::time()->getRequestTime());
       }
+      // Create sync record so it can be retrieved faster next time.
+      // @see sync_entity_update().
+      $entity->__sync_id = $id;
+      $entity->__sync_group = $group;
     }
     return $entity;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getNew($entity_type, $bundle, array $values = []) {
-    $bundle_key = $this->entityTypeManager->getDefinition($entity_type)->getKey('bundle');
-    if ($bundle_key) {
-      $values[$bundle_key] = $bundle;
-    }
-    $uid = $this->currentUser->id();
-    if (empty($uid)) {
-      $uid = 1;
-    }
-    return $this->entityTypeManager->getStorage($entity_type)->create([
-      'uid' => $uid,
-    ] + $values);
   }
 
   /**
@@ -99,7 +84,7 @@ class SyncEntityProvider implements SyncEntityProviderInterface {
   public function getOrNew($id, $entity_type, $bundle, array $values = [], $group = 'default') {
     $entity = $this->get($id, $entity_type, $bundle, $values, $group);
     if (empty($entity)) {
-      $entity = $this->getNew($entity_type, $bundle, $values);
+      $entity = $this->getNew($id, $entity_type, $bundle, $values, $group);
     }
     return $entity;
   }
@@ -110,8 +95,8 @@ class SyncEntityProvider implements SyncEntityProviderInterface {
   public function getOrCreate($id, $entity_type, $bundle, array $values = [], $group = 'default') {
     $entity = $this->get($id, $entity_type, $bundle, $values, $group);
     if (empty($entity)) {
-      $entity = $this->getNew($entity_type, $bundle, $values);
-      $this->save($id, $entity, $group);
+      $entity = $this->getNew($id, $entity_type, $bundle, $values, $group);
+      $entity->save();
     }
     return $entity;
   }
@@ -119,12 +104,22 @@ class SyncEntityProvider implements SyncEntityProviderInterface {
   /**
    * {@inheritdoc}
    */
-  public function save($id, $entity, $group = 'default') {
-    $status = $entity->save();
-    if ($status) {
-      $this->syncStorage->save($id, $entity, FALSE, $group);
+  protected function getNew($id, $entity_type, $bundle, array $values = [], $group = 'default') {
+    $bundle_key = $this->entityTypeManager->getDefinition($entity_type)->getKey('bundle');
+    if ($bundle_key) {
+      $values[$bundle_key] = $bundle;
     }
-    return $status;
+    $uid = $this->currentUser->id();
+    if (empty($uid)) {
+      $uid = 1;
+    }
+    $entity = $this->entityTypeManager->getStorage($entity_type)->create([
+      'uid' => $uid,
+    ] + $values);
+    // @see sync_entity_update().
+    $entity->__sync_id = $id;
+    $entity->__sync_group = $group;
+    return $entity;
   }
 
 }

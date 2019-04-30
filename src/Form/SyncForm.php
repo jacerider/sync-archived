@@ -84,7 +84,7 @@ class SyncForm extends FormBase {
       $row['label']['#markup'] = $this->t('<strong>@label</strong><br><small>Entity: @entity<br>Type: @bundle</small>', [
         '@label' => $definition['label'],
         '@entity' => $entity_definition->getLabel(),
-        '@bundle' => $bundle_definitions[$definition['bundle']]['label'],
+        '@bundle' => isset($bundle_definitions[$definition['bundle']]) ? $bundle_definitions[$definition['bundle']]['label'] : 'None Specified',
       ]);
       $row['times']['#markup'] = '<em>' . implode(', ', array_map(function ($time) {
         return date('g:ia', strtotime($time));
