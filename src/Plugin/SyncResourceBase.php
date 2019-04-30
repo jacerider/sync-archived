@@ -189,24 +189,34 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   public function run(array $additional = []) {
     $this->logger->notice('[Sync Queue: %plugin_label] START: %entity_type:%bundle.', $this->getContext());
     $start = \Drupal::time()->getRequestTime();
-    foreach ($this->getData() as $data) {
-      $item = [
-        'plugin_id' => $this->getPluginId(),
-        'op' => 'process',
-        'data' => $data + $additional,
-      ];
-      $this->queue->createItem($item);
+    $data = $this->getData();
+    if (!empty($data) || $this->shouldRunOnEmpty()) {
+      foreach ($this->getData() as $data) {
+        $item = [
+          'plugin_id' => $this->getPluginId(),
+          'op' => 'process',
+          'data' => $data + $additional,
+        ];
+        $this->queue->createItem($item);
+      }
+      if ($this->usesCleanup()) {
+        $this->queue->createItem([
+          'plugin_id' => $this->getPluginId(),
+          'op' => 'cleanup',
+          'no_count' => TRUE,
+          'data' => [
+            'start' => $start,
+          ] + $additional,
+        ]);
+      }
     }
-    if ($this->usesCleanup()) {
-      $this->queue->createItem([
-        'plugin_id' => $this->getPluginId(),
-        'op' => 'cleanup',
-        'no_count' => TRUE,
-        'data' => [
-          'start' => $start,
-        ] + $additional,
-      ]);
-    }
+  }
+
+  /**
+   * Determine if sync should run even if there are no results.
+   */
+  protected function shouldRunOnEmpty() {
+    return FALSE;
   }
 
   /**
