@@ -377,9 +377,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $context = $this->getContext($data);
     $id = $this->id($data);
     $context['%id'] = $id;
+    $entity = $this->loadEntity($data);
     try {
       $this->logger->notice('[Sync Item: %plugin_label] START: %id for %entity_type:%bundle', $context);
-      $entity = $this->loadEntity($data);
       if ($entity) {
         if ($this->syncAccess($entity)) {
           $this->processItem($entity, $data);
@@ -412,6 +412,8 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     }
     catch (SyncHaltException $e) {
       $this->logger->notice('[Sync Item Skip: %plugin_label] SKIP: %id for %entity_type:%bundle', $context);
+      // We need to make sure we have updated this record when skipping.
+      $this->syncStorage->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
       if ($data['_sync_as_batch']) {
         // Send up to runBatch.
         throw new SyncHaltException($e->getMessage());
