@@ -22,6 +22,8 @@ class Csv extends SyncParserBase {
     $skip_empty_lines = TRUE;
     $trim_fields = TRUE;
     $use_header = TRUE;
+    $langcode = \Drupal::languageManager()->getCurrentLanguage()->getId();
+    $trans = \Drupal::transliteration();
     $enc = preg_replace('/(?<!")""/', '!!Q!!', $data);
     $enc = preg_replace_callback(
         '/"(.*?)"/s',
@@ -34,21 +36,14 @@ class Csv extends SyncParserBase {
     // $header = $use_header ? array_shift($lines) : [];
     // ksm($header);
     $data = array_map(
-        function ($line) use ($delimiter, $trim_fields) {
+        function ($line) use ($delimiter, $trim_fields, $trans, $langcode) {
           $fields = $trim_fields ? array_map('trim', explode($delimiter, $line)) : explode($delimiter, $line);
           return array_map(
-              function ($field) {
-                  return str_replace('!!Q!!', '"', utf8_decode(urldecode($field)));
-              },
-              $fields
+            function ($field) use ($trans, $langcode) {
+              return $trans->transliterate(str_replace('!!Q!!', '"', utf8_decode(urldecode($field))), $langcode);
+            },
+            $fields
           );
-          if (!empty($header)) {
-            // $fields = array_combine($header, $fields);
-            // array_walk($fields, function (&$row, $key, $header) {
-            //   $row = array_combine($header, $row);
-            // }, $header);.
-          }
-          return $fields;
         },
         $lines
     );
