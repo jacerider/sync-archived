@@ -4,8 +4,8 @@ namespace Drupal\sync;
 
 use Drupal\Core\Database\Driver\mysql\Connection;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
-use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Database\Query\ConditionInterface;
+use Drupal\Core\Entity\EntityInterface;
 
 /**
  * Class SyncStorage.
@@ -99,7 +99,7 @@ class SyncStorage implements SyncStorageInterface {
   /**
    * {@inheritdoc}
    */
-  public function save($id, ContentEntityInterface $entity, $locked = FALSE, $group = 'default') {
+  public function save($id, EntityInterface $entity, $locked = FALSE, $group = 'default') {
     $status = $this->database->merge('sync')
       ->key(['id' => $id, 'entity_type' => $entity->getEntityTypeId()])
       ->fields([

@@ -5,6 +5,8 @@
  * Contains install and update functions for sync.
  */
 
+use Drupal\Core\Database\Database;
+
 /**
  * Implements hook_schema().
  *
@@ -33,9 +35,10 @@ function sync_schema() {
         'description' => 'The entity type.',
       ],
       'entity_id' => [
-        'type' => 'int',
+        'type' => 'varchar_ascii',
+        'length' => 255,
         'not null' => TRUE,
-        'default' => 0,
+        'default' => '',
         'description' => "The entity id.",
       ],
       'locked' => [
@@ -80,4 +83,18 @@ function sync_schema() {
     'primary key' => ['id', 'group'],
   ];
   return $schema;
+}
+
+/**
+ * Convert entity_id column to varchar to support config entity ids.
+ */
+function sync_update_8001() {
+  $schema = Database::getConnection()->schema();
+  $schema->changeField('sync', 'entity_id', 'entity_id', [
+    'type' => 'varchar_ascii',
+    'length' => 255,
+    'not null' => TRUE,
+    'default' => '',
+    'description' => "The entity id.",
+  ]);
 }
