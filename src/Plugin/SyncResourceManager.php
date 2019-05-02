@@ -87,7 +87,7 @@ class SyncResourceManager extends DefaultPluginManager {
     $days = $this->getCronDays($definition);
     if ($times && $days) {
       $request_time = \Drupal::time()->getRequestTime();
-      $last = $this->getLastRun($definition);
+      $last = $this->getLastRunStart($definition);
       $ran_today = date('ymd', $last) === date('ymd', $request_time);
 
       // Check to make sure current day is supported.
@@ -184,25 +184,10 @@ class SyncResourceManager extends DefaultPluginManager {
    * @return string
    *   A timestamp.
    */
-  public static function getLastRun(array $definition) {
+  public static function getLastRunStart(array $definition) {
     $state = \Drupal::state();
     $key = self::getStateKey($definition);
     return $last = $state->get($key, 0);
-  }
-
-  /**
-   * Reset last run timestamp.
-   *
-   * @param array $definition
-   *   The plugin definition.
-   *
-   * @return string
-   *   A timestamp.
-   */
-  public static function resetLastRun(array $definition) {
-    $state = \Drupal::state();
-    $key = self::getStateKey($definition);
-    return $last = $state->delete($key);
   }
 
   /**
@@ -210,16 +195,18 @@ class SyncResourceManager extends DefaultPluginManager {
    *
    * @param array $definition
    *   The plugin definition.
+   * @param string $timestamp
+   *   The start timestamp.
    *
    * @return string
    *   A timestamp.
    */
-  public function setLastRun(array $definition) {
+  public function setLastRunStart(array $definition, $timestamp = NULL) {
     $state = \Drupal::state();
     $key = self::getStateKey($definition);
-    $request_time = \Drupal::time()->getCurrentTime();
-    $state->set($key, $request_time);
-    return $request_time;
+    $timestamp = $timestamp ? $timestamp : \Drupal::time()->getCurrentTime();
+    $state->set($key, $timestamp);
+    return $timestamp;
   }
 
   /**
@@ -242,16 +229,33 @@ class SyncResourceManager extends DefaultPluginManager {
    *
    * @param array $definition
    *   The plugin definition.
+   * @param string $timestamp
+   *   The start timestamp.
    *
    * @return string
    *   A timestamp.
    */
-  public function setLastRunEnd(array $definition) {
+  public function setLastRunEnd(array $definition, $timestamp = NULL) {
     $state = \Drupal::state();
     $key = self::getStateKey($definition) . '.end';
-    $request_time = \Drupal::time()->getCurrentTime();
-    $state->set($key, $request_time);
-    return $request_time;
+    $timestamp = $timestamp ? $timestamp : \Drupal::time()->getCurrentTime();
+    $state->set($key, $timestamp);
+    return $timestamp;
+  }
+
+  /**
+   * Reset last run timestamp.
+   *
+   * @param array $definition
+   *   The plugin definition.
+   *
+   * @return string
+   *   A timestamp.
+   */
+  public static function resetLastRun(array $definition) {
+    $state = \Drupal::state();
+    $key = self::getStateKey($definition);
+    return $state->delete($key) && $state->delete($key . '.end');
   }
 
 }

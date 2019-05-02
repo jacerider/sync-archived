@@ -107,8 +107,12 @@ class SyncForm extends FormBase {
       else {
         $row['next']['#markup'] = '<small>' . ($enabled ? $date_formatter->format($next) : '-') . '</small>';
       }
-      $last_run = $this->syncResourceManager->getLastRun($definition);
-      $row['last']['#markup'] = '<small>' . ($last_run ? $date_formatter->format($last_run) : '-') . '</small>';
+      $last_run_start = $this->syncResourceManager->getLastRunStart($definition);
+      $last_run_end = $this->syncResourceManager->getLastRunEnd($definition);
+      $row['last']['#markup'] = $this->t('<small>Start: %start<br>Finish: %end</small>', [
+        '%start' => $last_run_start ? $date_formatter->format($last_run_start) : '-',
+        '%end' => $last_run_end ? $date_formatter->format($last_run_end) : '-',
+      ]);
       if ($enabled) {
         $row['actions'] = ['#type' => 'actions', '#attributes' => ['style' => 'white-space: nowrap;']];
         $row['actions']['run'] = [
@@ -151,9 +155,9 @@ class SyncForm extends FormBase {
   public function sync(array &$form, FormStateInterface $form_state) {
     $trigger = $form_state->getTriggeringElement();
     $plugin_id = $trigger['#plugin_id'];
-    $plugin = $this->syncResourceManager->getDefinition($plugin_id);
+    // $plugin = $this->syncResourceManager->getDefinition($plugin_id);
     $this->syncResourceManager->createInstance($plugin_id)->runAsBatch();
-    $this->syncResourceManager->setLastRun($plugin);
+    // $this->syncResourceManager->setLastRunStart($plugin);
   }
 
   /**

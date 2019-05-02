@@ -178,6 +178,20 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * {@inheritdoc}
    */
+  public function getLastStart() {
+    return \Drupal::service('plugin.manager.sync_resource')->getLastRunStart($this->pluginDefinition);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getLastEnd() {
+    return \Drupal::service('plugin.manager.sync_resource')->getLastRunEnd($this->pluginDefinition);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function usesCleanup() {
     $definition = $this->getPluginDefinition();
     return $definition['cleanup'] == TRUE;
@@ -191,6 +205,14 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $start = \Drupal::time()->getRequestTime();
     $data = $this->getData();
     if (!empty($data) || $this->shouldRunOnEmpty()) {
+      $this->queue->createItem([
+        'plugin_id' => $this->getPluginId(),
+        'op' => 'start',
+        'no_count' => TRUE,
+        'data' => [
+          'start' => $start,
+        ] + $additional,
+      ]);
       foreach ($this->getData() as $data) {
         $item = [
           'plugin_id' => $this->getPluginId(),
@@ -209,7 +231,29 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
           ] + $additional,
         ]);
       }
+      $this->queue->createItem([
+        'plugin_id' => $this->getPluginId(),
+        'op' => 'end',
+        'no_count' => TRUE,
+        'data' => [
+          'start' => $start,
+        ] + $additional,
+      ]);
     }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function start(array $data) {
+    \Drupal::service('plugin.manager.sync_resource')->setLastRunStart($this->pluginDefinition, $data['start']);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function end(array $data) {
+    \Drupal::service('plugin.manager.sync_resource')->setLastRunEnd($this->pluginDefinition);
   }
 
   /**

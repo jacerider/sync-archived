@@ -32,7 +32,6 @@ function sync_cron() {
   foreach ($manager->getForCron() as $instance) {
     /* @var \Drupal\sync\Plugin\SyncResourceInterface $instance */
     $instance->run();
-    $manager->setLastRun($instance->getPluginDefinition());
   }
 }
 
