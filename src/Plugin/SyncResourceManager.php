@@ -85,27 +85,30 @@ class SyncResourceManager extends DefaultPluginManager {
   public function getNextCronTime(array $definition) {
     $times = $this->getCronTimes($definition);
     $days = $this->getCronDays($definition);
-    $request_time = \Drupal::time()->getRequestTime();
-    $last = $this->getLastRun($definition);
-    $ran_today = date('ymd', $last) === date('ymd', $request_time);
+    if ($times && $days) {
+      $request_time = \Drupal::time()->getRequestTime();
+      $last = $this->getLastRun($definition);
+      $ran_today = date('ymd', $last) === date('ymd', $request_time);
 
-    // Check to make sure current day is supported.
-    if ($next_day = $this->getNextCronDay($definition)) {
-      return $next_day;
-    }
-
-    foreach ($times as $time) {
-      $cron_time = strtotime($time);
-      if ($cron_time > $last) {
-        return $cron_time;
-      }
-    }
-
-    if ($ran_today) {
       // Check to make sure current day is supported.
-      return $this->getNextCronDay($definition, TRUE);
+      if ($next_day = $this->getNextCronDay($definition)) {
+        return $next_day;
+      }
+
+      foreach ($times as $time) {
+        $cron_time = strtotime($time);
+        if ($cron_time > $last) {
+          return $cron_time;
+        }
+      }
+
+      if ($ran_today) {
+        // Check to make sure current day is supported.
+        return $this->getNextCronDay($definition, TRUE);
+      }
+      return strtotime($times[0]);
     }
-    return strtotime($times[0]);
+    return NULL;
   }
 
   /**
@@ -117,22 +120,24 @@ class SyncResourceManager extends DefaultPluginManager {
   protected function getNextCronDay(array $definition, $force_next = FALSE) {
     $times = $this->getCronTimes($definition);
     $days = $this->getCronDays($definition);
-    $days_of_week = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    if ($times && $days) {
+      $days_of_week = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
-    // Check to make sure current day is supported.
-    if (!in_array(strtolower(date('D')), $days) || $force_next) {
-      foreach ($days_of_week as $day) {
-        if (in_array($day, $days) && strtotime($day . ' this week') > time()) {
-          return strtotime($day . ' this week ' . $times[0], strtotime($times[0]));
+      // Check to make sure current day is supported.
+      if (!in_array(strtolower(date('D')), $days) || $force_next) {
+        foreach ($days_of_week as $day) {
+          if (in_array($day, $days) && strtotime($day . ' this week') > time()) {
+            return strtotime($day . ' this week ' . $times[0], strtotime($times[0]));
+          }
         }
-      }
-      // We havn't found a match which means nothing more happens this week.
-      foreach ($days_of_week as $day) {
-        if (in_array($day, $days)) {
-          return strtotime($day . ' next week ' . $times[0], strtotime($times[0]));
+        // We havn't found a match which means nothing more happens this week.
+        foreach ($days_of_week as $day) {
+          if (in_array($day, $days)) {
+            return strtotime($day . ' next week ' . $times[0], strtotime($times[0]));
+          }
         }
-      }
 
+      }
     }
     return NULL;
   }
@@ -144,7 +149,7 @@ class SyncResourceManager extends DefaultPluginManager {
    *   All cron times.
    */
   public function getCronTimes(array $definition) {
-    return array_map('trim', explode(',', $definition['cron']));
+    return $definition['cron'] ? array_map('trim', explode(',', $definition['cron'])) : FALSE;
   }
 
   /**
@@ -154,7 +159,7 @@ class SyncResourceManager extends DefaultPluginManager {
    *   All cron days.
    */
   public function getCronDays(array $definition) {
-    return array_map('trim', explode(',', $definition['day']));
+    return $definition['cron'] ? array_map('trim', explode(',', $definition['day'])) : FALSE;
   }
 
   /**

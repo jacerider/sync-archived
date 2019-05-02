@@ -69,10 +69,10 @@ class SyncForm extends FormBase {
       '#type' => 'table',
       '#header' => [
         'label' => $this->t('Name'),
-        'times' => $this->t('Times'),
         'cleanup' => $this->t('Cleanup'),
+        'times' => $this->t('Times'),
         'next' => $this->t('Next Cron Run'),
-        'last' => $this->t('Last Cron Run'),
+        'last' => $this->t('Last Run'),
         'actions' => $this->t('Sync Data'),
       ],
     ];
@@ -86,14 +86,22 @@ class SyncForm extends FormBase {
         '@entity' => $entity_definition->getLabel(),
         '@bundle' => isset($bundle_definitions[$definition['bundle']]) ? $bundle_definitions[$definition['bundle']]['label'] : 'None Specified',
       ]);
-      $row['times']['#markup'] = '<em>' . implode(', ', array_map(function ($time) {
-        return date('g:ia', strtotime($time));
-      }, $this->syncResourceManager->getCronTimes($definition))) . '</em><br><small>' . implode(', ', array_map(function ($time) {
-        return date('D', strtotime($time));
-      }, $this->syncResourceManager->getCronDays($definition))) . '</small>';
       $row['clean']['#markup'] = '<small>' . (!empty($definition['cleanup']) ? $this->t('Yes') : $this->t('No')) . '</small>';
+      if (($times = $this->syncResourceManager->getCronTimes($definition)) && ($days = $this->syncResourceManager->getCronDays($definition))) {
+        $row['times']['#markup'] = '<em>' . implode(', ', array_map(function ($time) {
+          return date('g:ia', strtotime($time));
+        }, $times)) . '</em><br><small>' . implode(', ', array_map(function ($time) {
+          return date('D', strtotime($time));
+        }, $days)) . '</small>';
+      }
+      else {
+        $row['times']['#markup'] = '-';
+      }
       $next = $this->syncResourceManager->getNextCronTime($definition);
-      if ($next < $request_time) {
+      if (!$next) {
+        $row['next']['#markup'] = '-';
+      }
+      elseif ($next < $request_time) {
         $row['next']['#markup'] = '<small>Next Run</small>';
       }
       else {
