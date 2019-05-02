@@ -121,6 +121,18 @@ class SyncStorage implements SyncStorageInterface {
   /**
    * {@inheritdoc}
    */
+  public function lastUpdated($id, $group = 'default') {
+    $query = $this->database->select('sync_data');
+    $query->fields('sync_data', ['changed']);
+    $query->condition('id', $id);
+    $query->condition('group', $group);
+    $query->range(0, 1);
+    return $query->execute()->fetchField(0);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function deleteByProperties(array $values = []) {
     $data = $this->loadByProperties($values);
     foreach ($data as $id => $item) {
