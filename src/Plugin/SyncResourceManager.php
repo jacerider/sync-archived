@@ -222,4 +222,36 @@ class SyncResourceManager extends DefaultPluginManager {
     return $request_time;
   }
 
+  /**
+   * Get last run timestamp.
+   *
+   * @param array $definition
+   *   The plugin definition.
+   *
+   * @return string
+   *   A timestamp.
+   */
+  public static function getLastRunEnd(array $definition) {
+    $state = \Drupal::state();
+    $key = self::getStateKey($definition) . '.end';
+    return $last = $state->get($key, 0);
+  }
+
+  /**
+   * Sets last run timestamp.
+   *
+   * @param array $definition
+   *   The plugin definition.
+   *
+   * @return string
+   *   A timestamp.
+   */
+  public function setLastRunEnd(array $definition) {
+    $state = \Drupal::state();
+    $key = self::getStateKey($definition) . '.end';
+    $request_time = \Drupal::time()->getCurrentTime();
+    $state->set($key, $request_time);
+    return $request_time;
+  }
+
 }
