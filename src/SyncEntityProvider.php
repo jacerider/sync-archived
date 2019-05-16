@@ -116,10 +116,17 @@ class SyncEntityProvider implements SyncEntityProviderInterface {
     $entity = $this->entityTypeManager->getStorage($entity_type)->create([
       'uid' => $uid,
     ] + $values);
+    $this->attachProperties($entity, $id, $group);
+    return $entity;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function attachProperties($entity, $id, $group = 'default') {
     // @see sync_entity_update().
     $entity->__sync_id = $id;
     $entity->__sync_group = $group;
-    return $entity;
   }
 
 }

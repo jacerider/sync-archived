@@ -22,7 +22,7 @@ class SyncClientManager extends DefaultPluginManager implements SyncClientManage
   protected $defaults = [
     'fetcher' => '',
     'fetcher_settings' => [],
-    'parser' => '',
+    'parser' => 'none',
     'parser_settings' => [],
   ];
 

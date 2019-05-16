@@ -77,6 +77,13 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   protected $syncEntityProvider;
 
   /**
+   * The maximum number of items to show when debugging.
+   *
+   * @var int
+   */
+  protected $maxDebug = 100;
+
+  /**
    * Constructs a SyncResource object.
    *
    * @param array $configuration
@@ -201,7 +208,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * {@inheritdoc}
    */
   public function run(array $additional = []) {
-    $this->logger->notice('[Sync Queue: %plugin_label] START: %entity_type:%bundle.', $this->getContext());
+    $this->logger->notice('[Sync Queue: %plugin_label] START: %entity_type.', $this->getContext());
     $start = \Drupal::time()->getRequestTime();
     $data = $this->getData();
     if (!empty($data) || $this->shouldRunOnEmpty()) {
@@ -386,14 +393,14 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $parser = $this->syncParserManager->createInstance($client['parser'], $settings);
     $this->alterParser($parser);
     try {
-      $this->logger->notice('[Sync Data: %plugin_label] GET: %entity_type:%bundle.', $this->getContext());
+      $this->logger->notice('[Sync Data: %plugin_label] GET: %entity_type.', $this->getContext());
       $data = $fetcher->fetch();
       $data = $parser->parse($data);
       $data = $this->filter($data);
       return $data;
     }
     catch (\Exception $e) {
-      $this->logger->error('[Sync Data: %plugin_label] ERROR: %entity_type:%bundle: @message.', $this->getContext() + [
+      $this->logger->error('[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
         '@message' => $e->getMessage(),
       ]);
     }
@@ -614,8 +621,8 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    */
   public function debug() {
     $data = $this->getData();
-    if (count($data) > 100) {
-      $data = array_slice($data, 0, 100);
+    if (count($data) > $this->maxDebug) {
+      $data = array_slice($data, 0, $this->maxDebug);
     }
     if (\Drupal::service('module_handler')->moduleExists('kint')) {
       ksm($data);
@@ -634,8 +641,10 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       '%plugin_id' => $this->getPluginId(),
       '%plugin_label' => $this->label(),
       '%entity_type' => $this->getEntityType(),
-      '%bundle' => $this->getBundle($data),
     ];
+    if (!empty($data)) {
+      $context['%bundle'] = $this->getBundle($data);
+    }
     if (!empty($data)) {
       $context += [
         '%data' => print_r($data, TRUE),
