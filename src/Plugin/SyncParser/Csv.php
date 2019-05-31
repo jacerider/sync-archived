@@ -40,7 +40,7 @@ class Csv extends SyncParserBase {
           $fields = $trim_fields ? array_map('trim', explode($delimiter, $line)) : explode($delimiter, $line);
           return array_map(
             function ($field) use ($trans, $langcode) {
-              return $trans->transliterate(str_replace('!!Q!!', '"', utf8_decode(urldecode($field))), $langcode);
+              return str_replace('!!Q!!', '"', utf8_decode(urldecode($field)));
             },
             $fields
           );
