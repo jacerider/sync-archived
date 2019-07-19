@@ -37,13 +37,19 @@ class Http extends SyncFetcherBase implements ContainerFactoryPluginInterface {
    *   The Guzzle HTTP client.
    */
   public function __construct(array $configuration, $plugin_id, $plugin_definition, ClientInterface $http_client) {
-    $configuration += [
+    parent::__construct($configuration, $plugin_id, $plugin_definition);
+    $this->httpClient = $http_client;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function defaultSettings() {
+    return [
       'url' => '',
       'query' => [],
       'as_content' => TRUE,
     ];
-    parent::__construct($configuration, $plugin_id, $plugin_definition);
-    $this->httpClient = $http_client;
   }
 
   /**

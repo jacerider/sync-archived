@@ -15,20 +15,12 @@ use Drupal\sync\Plugin\SyncFetcherBase;
 class File extends SyncFetcherBase {
 
   /**
-   * Constructs a SyncFetcher object.
-   *
-   * @param array $configuration
-   *   A configuration array containing information about the plugin instance.
-   * @param string $plugin_id
-   *   The plugin_id for the plugin instance.
-   * @param mixed $plugin_definition
-   *   The plugin implementation definition.
+   * {@inheritdoc}
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition) {
-    $configuration += [
+  protected function defaultSettings() {
+    return [
       'path' => '',
     ];
-    parent::__construct($configuration, $plugin_id, $plugin_definition);
   }
 
   /**

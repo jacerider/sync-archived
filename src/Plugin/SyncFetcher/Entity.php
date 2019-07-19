@@ -17,12 +17,11 @@ class Entity extends SyncFetcherBase {
   /**
    * {@inheritdoc}
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition) {
-    $configuration += [
+  protected function defaultSettings() {
+    return [
       'entity_type' => '',
       'properties' => [],
     ];
-    parent::__construct($configuration, $plugin_id, $plugin_definition);
   }
 
   /**

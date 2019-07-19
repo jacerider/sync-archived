@@ -81,8 +81,9 @@ class SyncForm extends FormBase {
       $bundle_definitions = $this->entityManager->getBundleInfo($definition['entity_type']);
       $enabled = !empty($definition['status']);
       $row = [];
-      $row['label']['#markup'] = $this->t('<strong>@label</strong><br><small>Entity: @entity<br>Type: @bundle</small>', [
+      $row['label']['#markup'] = $this->t('<strong>@label</strong> <small>(@id)</small><br><small>Entity: @entity<br>Type: @bundle</small>', [
         '@label' => $definition['label'],
+        '@id' => $definition['id'],
         '@entity' => $entity_definition->getLabel(),
         '@bundle' => isset($bundle_definitions[$definition['bundle']]) ? $bundle_definitions[$definition['bundle']]['label'] : 'None Specified',
       ]);
@@ -155,9 +156,7 @@ class SyncForm extends FormBase {
   public function sync(array &$form, FormStateInterface $form_state) {
     $trigger = $form_state->getTriggeringElement();
     $plugin_id = $trigger['#plugin_id'];
-    // $plugin = $this->syncResourceManager->getDefinition($plugin_id);
     $this->syncResourceManager->createInstance($plugin_id)->runAsBatch();
-    // $this->syncResourceManager->setLastRunStart($plugin);
   }
 
   /**

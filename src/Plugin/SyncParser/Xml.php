@@ -35,6 +35,9 @@ class Xml extends SyncParserBase {
    * {@inheritdoc}
    */
   public function parse($data) {
+    if (empty($data)) {
+      return [];
+    }
     $xml = simplexml_load_string($data);
     $base_key = $this->configuration['base_key'];
     $data = $this->recurseXml($xml);
