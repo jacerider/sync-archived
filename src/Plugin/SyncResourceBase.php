@@ -10,10 +10,11 @@ use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Drupal\Core\Queue\QueueInterface;
 use Drupal\sync\SyncHaltException;
 use Drupal\sync\SyncEntityProviderInterface;
-use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Entity\EntityInterface;
 use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\sync\SyncStorageInterface;
+use Drupal\Core\State\StateInterface;
 
 /**
  * Base class for Sync Resource plugins.
@@ -28,6 +29,13 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   protected $entityTypeManager;
 
   /**
+   * The state storage service.
+   *
+   * @var \Drupal\Core\State\StateInterface
+   */
+  protected $state;
+
+  /**
    * A logger instance.
    *
    * @var \Psr\Log\LoggerInterface
@@ -39,14 +47,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    *
    * @var \Drupal\Core\Queue\QueueInterface
    */
-  protected $queueFetcher;
-
-  /**
-   * The item queue object.
-   *
-   * @var \Drupal\Core\Queue\QueueInterface
-   */
-  protected $queueItem;
+  protected $queue;
 
   /**
    * The sync client manager.
@@ -108,11 +109,11 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    *   The plugin implementation definition.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
    *   The entity type manager.
+   * @param \Drupal\Core\State\StateInterface $state
+   *   The state storage service.
    * @param \Drupal\Core\Logger\LoggerChannelFactoryInterface $logger
    *   The logger channel factory.
-   * @param \Drupal\Core\Queue\QueueInterface $queue_fetcher
-   *   The fetcher queue object.
-   * @param \Drupal\Core\Queue\QueueInterface $queue_item
+   * @param \Drupal\Core\Queue\QueueInterface $queue
    *   The item queue object.
    * @param \Drupal\sync\SyncClientManagerInterface $sync_client_manager
    *   The sync client manager.
@@ -125,12 +126,12 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * @param \Drupal\sync\SyncEntityProviderInterface $sync_entity_provider
    *   The sync entity provider.
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, EntityTypeManagerInterface $entity_type_manager, LoggerChannelFactoryInterface $logger, QueueInterface $queue_fetcher, QueueInterface $queue_item, SyncClientManagerInterface $sync_client_manager, SyncFetcherManager $sync_fetcher_manager, SyncParserManager $sync_parser_manager, SyncStorageInterface $sync_storage, SyncEntityProviderInterface $sync_entity_provider) {
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, EntityTypeManagerInterface $entity_type_manager, StateInterface $state, LoggerChannelFactoryInterface $logger, QueueInterface $queue, SyncClientManagerInterface $sync_client_manager, SyncFetcherManager $sync_fetcher_manager, SyncParserManager $sync_parser_manager, SyncStorageInterface $sync_storage, SyncEntityProviderInterface $sync_entity_provider) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
     $this->entityTypeManager = $entity_type_manager;
+    $this->state = $state;
     $this->logger = $logger->get('sync');
-    $this->queueFetcher = $queue_fetcher;
-    $this->queueItem = $queue_item;
+    $this->queue = $queue;
     $this->syncClientManager = $sync_client_manager;
     $this->syncFetcherManager = $sync_fetcher_manager;
     $this->syncParserManager = $sync_parser_manager;
@@ -147,9 +148,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $plugin_id,
       $plugin_definition,
       $container->get('entity_type.manager'),
+      $container->get('state'),
       $container->get('logger.factory'),
-      $container->get('queue')->get('sync_fetcher'),
-      $container->get('queue')->get('sync_item'),
+      $container->get('queue')->get('sync'),
       $container->get('plugin.manager.sync_client'),
       $container->get('plugin.manager.sync_fetcher'),
       $container->get('plugin.manager.sync_parser'),
@@ -227,71 +228,156 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    */
   public function run(array $additional = []) {
     $this->logger->notice('[Sync Queue: %plugin_label] START: %entity_type.', $this->getContext());
-    try {
-      $data = $this->getData($additional + [
-        '_pager_finish' => 'run',
+    $this->setStartTime();
+    $this->fetchData($additional);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function runAsBatch() {
+    $this->run([
+      '_sync_as_batch' => TRUE,
+    ]);
+    $this->buildBatch();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function queueStart(array $additional = []) {
+    $this->queue->createItem([
+      'plugin_id' => $this->getPluginId(),
+      'op' => 'start',
+      'no_count' => TRUE,
+      'data' => $additional,
+    ]);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function queueProcess($data, array $additional = []) {
+    foreach ($data as $item_data) {
+      $this->queue->createItem([
+        'plugin_id' => $this->getPluginId(),
+        'op' => 'process',
+        'data' => $item_data + $additional,
       ]);
-      if (!empty($data) || $this->shouldRunOnEmpty()) {
-        $this->runData($data, $additional);
-      }
-    }
-    catch (SyncFetcherPagingException $e) {
-      // Do nothing.
     }
   }
 
   /**
    * {@inheritdoc}
    */
-  protected function runData($data, array $additional = []) {
+  protected function queueEnd(array $additional = []) {
     $start = \Drupal::time()->getRequestTime();
-    $this->queueItem->createItem([
-      'plugin_id' => $this->getPluginId(),
-      'op' => 'start',
-      'no_count' => TRUE,
-      'data' => [
-        'start' => $start,
-      ] + $additional,
-    ]);
-    foreach ($data as $item_data) {
-      $item = [
-        'plugin_id' => $this->getPluginId(),
-        'op' => 'process',
-        'data' => $item_data + $additional,
-      ];
-      $this->queueItem->createItem($item);
-    }
     if ($this->usesCleanup()) {
-      $this->queueItem->createItem([
+      $this->queue->createItem([
         'plugin_id' => $this->getPluginId(),
-        'op' => 'cleanup',
+        'op' => 'queueCleanup',
         'no_count' => TRUE,
-        'data' => [
-          'start' => $start,
-        ] + $additional,
+        'data' => $additional,
       ]);
     }
-    $this->queueItem->createItem([
+    $this->queue->createItem([
       'plugin_id' => $this->getPluginId(),
       'op' => 'end',
       'no_count' => TRUE,
-      'data' => [
-        'start' => $start,
-      ] + $additional,
+      'data' => $additional,
     ]);
+  }
+
+  /**
+   * Add a pager batch item.
+   */
+  protected function queueFetchPage($data, SyncFetcherInterface $fetcher, SyncParserInterface $parser, $additional = []) {
+    $this->queue->createItem([
+      'plugin_id' => $this->getPluginId(),
+      'op' => 'fetchPage',
+      'no_count' => TRUE,
+      'data' => [
+        'data' => $data,
+        'additional' => $additional,
+        'fetcher' => $fetcher,
+        'parser' => $parser,
+      ],
+    ]);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function fetchPage(array $batch_data) {
+    $page = $this->getPageCount();
+    $this->incrementPageCount();
+    $previous_data = $batch_data['data'];
+    $additional = $batch_data['additional'];
+    $fetcher = $batch_data['fetcher'];
+    $parser = $batch_data['parser'];
+    if (PHP_SAPI === 'cli' && function_exists('drush_print')) {
+      if ($page > 1) {
+        $red = "\033[31;40m\033[1m%s\033[0m";
+        $yellow = "\033[1;33;40m\033[1m%s\033[0m";
+        $green = "\033[1;32;40m\033[1m%s\033[0m";
+        drush_log(sprintf($green, dt('Fetching... [Page: @page | Success: @success | Skipped: @skip | Failed: @fail]', [
+          '@page' => $page,
+          '@success' => $this->getProcessCount('success'),
+          '@skip' => $this->getProcessCount('skip'),
+          '@fail' => $this->getProcessCount('fail'),
+        ])), 'ok');
+      }
+    }
+    $new_data = $fetcher->fetchPage($previous_data, $page);
+    $new_data = $parser->parse($new_data);
+    $new_data = $this->filter($new_data);
+    $context = $this->getContext() + [
+      '%page' => $page,
+      '%new_data_count' => count($new_data),
+    ];
+    if (!empty($new_data)) {
+      ksm($new_data);
+      // We may have more data to fetch, so run again.
+      $this->logger->notice('[Sync Fetch: %plugin_label] PAGE %page: %entity_type with %new_data_count records added for processing.', $context);
+      $this->queueProcess($new_data, $additional);
+      $this->queueFetchPage($new_data, $fetcher, $parser, $additional);
+    }
+    else {
+      // We have all the data we can get.
+      $this->logger->notice('[Sync Fetch: %plugin_label] PAGE FINISH: %entity_type.', $context);
+      $this->resetPageCount();
+      $this->queueEnd($additional);
+    }
+    if (!empty($additional['_sync_as_batch'])) {
+      $this->buildBatch();
+    }
   }
 
   /**
    * {@inheritdoc}
    */
   public function start(array $data) {
-    \Drupal::service('plugin.manager.sync_resource')->setLastRunStart($this->pluginDefinition, $data['start']);
+    $this->resetPageCount()
+      ->resetProcessCount('success')
+      ->resetProcessCount('skip')
+      ->resetProcessCount('fail');
+    \Drupal::service('plugin.manager.sync_resource')->setLastRunStart($this->pluginDefinition, $this->getStartTime());
   }
 
   /**
    * {@inheritdoc}
    */
   public function end(array $data) {
+    drupal_set_message(t('The data import has completed. %success items were successful, %skip items were skipped, and %fail items failed.', [
+      '%success' => $this->getProcessCount('success'),
+      '%skip' => $this->getProcessCount('skip'),
+      '%fail' => $this->getProcessCount('fail'),
+    ]));
+    $this->resetPageCount()
+      ->resetProcessCount('success')
+      ->resetProcessCount('skip')
+      ->resetProcessCount('fail');
+    $this->logger->notice('[Sync Queue: %plugin_label] FINISH: %entity_type.', $this->getContext());
     \Drupal::service('plugin.manager.sync_resource')->setLastRunEnd($this->pluginDefinition);
   }
 
@@ -305,19 +391,8 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * {@inheritdoc}
    */
-  public function runAsBatch() {
-    $this->run([
-      '_sync_as_batch' => TRUE,
-      '_pager_finish' => 'runAsBatch',
-    ]);
-    $this->buildBatch($this->queueItem);
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function buildBatch(QueueInterface $queue, $item_callback = 'runBatch', $finish_callback = 'finishItemBatch', $title = 'Importing Data') {
-    $item_count = $queue->numberOfItems();
+  public function buildBatch($item_callback = 'runBatchProxy', $title = 'Importing Data') {
+    $item_count = $this->queue->numberOfItems();
     if ($item_count) {
       $class_name = get_class($this);
       $batch = [
@@ -326,14 +401,11 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         'init_message' => t('Commencing'),
         'progress_message' => t('Please do not close this window until import is complete. Task @current out of @total.'),
         'error_message' => t('An error occurred during processing'),
-        'finished' => [
-          $class_name, $finish_callback,
-        ],
       ];
       for ($i = 0; $i < $item_count; $i++) {
         $batch['operations'][] = [
           [$class_name, $item_callback],
-          [],
+          [$this->pluginId],
         ];
       }
       batch_set($batch);
@@ -341,98 +413,99 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
+   * Finishes an "execute tasks" batch.
+   *
+   * @param string $plugin_id
+   *   The plugin id.
+   * @param array $context
+   *   The batch context.
+   */
+  public static function runBatchProxy($plugin_id, array &$context) {
+    \Drupal::service('plugin.manager.sync_resource')->createInstance($plugin_id)->runBatch($context);
+  }
+
+  /**
    * Runs a batch callback.
    *
    * @param array $context
    *   The batch context.
-   * @param string $queue_id
-   *   The queue_id of the queue and queue worker that should be ran.
    */
-  public static function runBatch(array &$context, $queue_id = 'sync_item') {
-    /** @var \Drupal\Core\Queue\QueueInterface $queue */
-    $queue = \Drupal::service('queue')->get($queue_id);
+  public function runBatch(array &$context) {
     /** @var \Drupal\Core\Queue\QueueWorkerInterface $queue_worker */
-    $queue_worker = \Drupal::service('plugin.manager.queue_worker')->createInstance($queue_id);
-    $item = $queue->claimItem();
+    $queue_worker = \Drupal::service('plugin.manager.queue_worker')->createInstance('sync');
+    $item = $this->queue->claimItem();
     if ($item) {
-      $context['results']['success'] = $context['results']['success'] ?? 0;
-      $context['results']['skip'] = $context['results']['skip'] ?? 0;
-      $context['results']['fail'] = $context['results']['fail'] ?? 0;
       try {
         $queue_worker->processItem($item->data);
-        $queue->deleteItem($item);
+        $this->queue->deleteItem($item);
         if (empty($item->data['no_count'])) {
-          $context['results']['success']++;
+          $this->incrementProcessCount('success');
         }
       }
       catch (SyncHaltException $e) {
         drupal_set_message($e->getMessage(), 'error');
-        $queue->deleteItem($item);
-        $context['results']['skip']++;
+        $this->queue->deleteItem($item);
+        if (empty($item->data['no_count'])) {
+          $this->incrementProcessCount('skip');
+        }
       }
       catch (SuspendQueueException $e) {
         drupal_set_message($e->getMessage(), 'error');
-        $queue->deleteItem($item);
+        $this->queue->deleteItem($item);
         if (empty($item->data['no_count'])) {
-          $context['results']['fail']++;
+          $this->incrementProcessCount('fail');
         }
       }
       catch (\Exception $e) {
         drupal_set_message($e->getMessage(), 'error');
-        $queue->deleteItem($item);
+        $this->queue->deleteItem($item);
         watchdog_exception('sync', $e);
         if (empty($item->data['no_count'])) {
-          $context['results']['fail']++;
+          $this->incrementProcessCount('fail');
         }
       }
     }
   }
 
   /**
-   * Callback executed when creation has completed.
-   *
-   * @param bool $success
-   *   TRUE if batch successfully completed.
-   * @param array $results
-   *   Batch results.
-   * @param array $operations
-   *   An array of methods run in the batch.
-   * @param string $elapsed
-   *   The time to run the batch.
+   * Fetch the data.
    */
-  public static function finishItemBatch($success, array $results, array $operations, $elapsed) {
-    $success = $results['success'] ?? 0;
-    $skip = $results['skip'] ?? 0;
-    $fail = $results['fail'] ?? 0;
-    drupal_set_message(t('The data import has completed. %success items were successful, %skip items were skipped, and %fail items failed.', [
-      '%success' => $success,
-      '%skip' => $skip,
-      '%fail' => $fail,
-    ]));
-  }
+  protected function fetchData($additional = [], $client_id = NULL, $fetcher_settings = [], $parser_settings = []) {
+    // Get client.
+    $client_id = $client_id ?: $this->getPluginDefinition()['client'];
+    $client = $this->syncClientManager->getDefinition($client_id);
+    // Get fetcher.
+    $settings = NestedArray::mergeDeep($client['fetcher_settings'], $fetcher_settings);
+    /** @var \Drupal\sync\Plugin\SyncFetcherInterface $fetcher */
+    $fetcher = $this->syncFetcherManager->createInstance($client['fetcher'], $settings);
+    $this->alterFetcher($fetcher);
+    // Get parser.
+    $settings = NestedArray::mergeDeep($client['parser_settings'], $parser_settings);
+    $parser = $this->syncParserManager->createInstance($client['parser'], $settings);
+    $this->alterParser($parser);
 
-  /**
-   * Callback executed when creation has completed.
-   *
-   * @param bool $success
-   *   TRUE if batch successfully completed.
-   * @param array $results
-   *   Batch results.
-   * @param array $operations
-   *   An array of methods run in the batch.
-   * @param string $elapsed
-   *   The time to run the batch.
-   */
-  public static function finishCleanupBatch($success, array $results, array $operations, $elapsed) {
+    $data = $this->loadData($client, $fetcher, $parser);
+    if (!empty($data) || $this->shouldRunOnEmpty()) {
+      $this->queueStart($additional);
+      $this->queueProcess($data, $additional);
+      if ($fetcher instanceof SyncFetcherPagedInterface) {
+        $this->queueFetchPage($data, $fetcher, $parser, $additional);
+      }
+      else {
+        $this->queueEnd($additional);
+      }
+    }
   }
 
   /**
    * Get the data.
    *
+   * Does not support paging. See fetchData for paging support.
+   *
    * @return array
    *   An array of data.
    */
-  protected function getData($additional = [], $client_id = NULL, $fetcher_settings = [], $parser_settings = []) {
+  protected function getData($client_id = NULL, $fetcher_settings = [], $parser_settings = []) {
     // Get client.
     $client_id = $client_id ?: $this->getPluginDefinition()['client'];
     $client = $this->syncClientManager->getDefinition($client_id);
@@ -444,23 +517,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $settings = NestedArray::mergeDeep($client['parser_settings'], $parser_settings);
     $parser = $this->syncParserManager->createInstance($client['parser'], $settings);
     $this->alterParser($parser);
-
-    $data = $this->loadData($client, $fetcher, $parser);
-    if ($fetcher->supportsPaging() && empty($additional['_pager_skip'])) {
-      $tempstore = $this->getTempStore();
-      // Reset temp storage.
-      // $tempstore->delete('page');
-      $this->resetPageCount();
-      $tempstore->delete('data');
-      // Check if we have already loaded all data.
-      if ($page_data = $tempstore->get('final_data')) {
-        $tempstore->delete('final_data');
-        return $page_data;
-      }
-      $this->addPage($fetcher, $parser, $additional, $data);
-      $this->buildBatch($this->queueFetcher, 'runPageBatch', 'finishPageBatch', 'Fetching Data');
-      throw new SyncFetcherPagingException();
-    }
     return $this->loadData($client, $fetcher, $parser);
   }
 
@@ -473,7 +529,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   protected function loadData(array $client, SyncFetcherInterface $fetcher, SyncParserInterface $parser) {
     $this->alterParser($parser);
     try {
-      $this->logger->notice('[Sync Data: %plugin_label] GET: %entity_type.', $this->getContext());
+      $this->logger->notice('[Sync Data: %plugin_label] LOAD DATA: %entity_type.', $this->getContext());
       $data = $fetcher->fetch();
       $data = $parser->parse($data);
       $data = $this->filter($data);
@@ -486,137 +542,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       drupal_set_message($e->getMessage(), 'error');
     }
     return [];
-  }
-
-  /**
-   * Get the temp storage service.
-   */
-  protected function getTempStore() {
-    return \Drupal::service('user.shared_tempstore')->get('sync');
-  }
-
-  /**
-   * Get the state key.
-   *
-   * @return string
-   *   The state key.
-   */
-  protected function getStateKey() {
-    return 'sync.resource.' . $this->pluginId;
-  }
-
-  /**
-   * Set the page count.
-   */
-  protected function getPageCount() {
-    $count = \Drupal::state()->get($this->getStateKey() . '.page');
-    return $count ? $count : 1;
-  }
-
-  /**
-   * Get the page count.
-   */
-  protected function incrementPageCount() {
-    $count = $this->getPageCount();
-    \Drupal::state()->set($this->getStateKey() . '.page', $count + 1);
-    return $this;
-  }
-
-  /**
-   * Reset the page count.
-   */
-  protected function resetPageCount() {
-    \Drupal::state()->delete($this->getStateKey() . '.page');
-    return $this;
-  }
-
-  /**
-   * Add a pager batch item.
-   */
-  protected function addPage(SyncFetcherInterface $fetcher, SyncParserInterface $parser, $additional = [], $new_data = []) {
-    $context = $this->getContext();
-    $tempstore = $this->getTempStore();
-    // $page = $tempstore->get('page') ? $tempstore->get('page') : 1;
-    $page = $this->getPageCount();
-    $data = $tempstore->get('data') ? $tempstore->get('data') : [];
-    $data = array_merge($data, $new_data);
-    $context['%page'] = $page;
-    $context['%data_count'] = count($data);
-    $context['%new_data_count'] = count($new_data);
-    if (empty($new_data)) {
-      $this->logger->notice('[Sync Item: %plugin_label] PAGE FINISH: %entity_type with %new_data_count records added for a total of %data_count.', $context);
-      $tempstore->set('final_data', $data);
-      // $tempstore->delete('page');
-      $this->resetPageCount();
-      $tempstore->delete('data');
-      if (!empty($additional['_pager_finish']) && method_exists($this, $additional['_pager_finish'])) {
-        // Call original method which will use stored data and continue.
-        $this->{$additional['_pager_finish']}();
-      }
-      return;
-    }
-    $this->logger->notice('[Sync Item: %plugin_label] PAGE %page: %entity_type with %new_data_count records added for a total of %data_count.', $context);
-    $this->queueFetcher->createItem([
-      'plugin_id' => $this->getPluginId(),
-      'op' => 'loadPageData',
-      'data' => [
-        'page' => $page,
-        'data' => $data,
-        'additional' => $additional,
-        'fetcher' => $fetcher,
-        'parser' => $parser,
-      ],
-    ]);
-    // $tempstore->set('page', $page + 1);
-    $this->incrementPageCount();
-    $tempstore->set('data', $data);
-    if (!empty($additional['_sync_as_batch'])) {
-      $this->buildBatch($this->queueFetcher, 'runPageBatch', 'finishPageBatch', 'Fetching Data: Batch ' . $page);
-    }
-    else {
-      $context = [];
-      $this->runPageBatch($context);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function loadPageData(array $batch_data) {
-    $fetcher = $batch_data['fetcher'];
-    $parser = $batch_data['parser'];
-    $page = $batch_data['page'];
-    $data = $batch_data['data'];
-    $additional = $batch_data['additional'];
-    $new_data = $fetcher->fetchPage($data, $page);
-    $new_data = $parser->parse($new_data);
-    $new_data = $this->filter($new_data);
-    $this->addPage($fetcher, $parser, $additional, $new_data);
-  }
-
-  /**
-   * Runs a single user batch import.
-   *
-   * @param array $context
-   *   The batch context.
-   */
-  public static function runPageBatch(array &$context) {
-    static::runBatch($context, 'sync_fetcher');
-  }
-
-  /**
-   * Callback executed when paging has completed.
-   *
-   * @param bool $success
-   *   TRUE if batch successfully completed.
-   * @param array $results
-   *   Batch results.
-   * @param array $operations
-   *   An array of methods run in the batch.
-   * @param string $elapsed
-   *   The time to run the batch.
-   */
-  public static function finishPageBatch($success, array $results, array $operations, $elapsed) {
   }
 
   /**
@@ -642,9 +567,11 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $context['%id'] = $id;
     $entity = $this->loadEntity($data);
     try {
-      $this->logger->notice('[Sync Item: %plugin_label] START: %id for %entity_type:%bundle', $context);
       if ($entity) {
         if ($this->syncAccess($entity)) {
+          if (PHP_SAPI === 'cli' && function_exists('drush_print')) {
+            drush_print(dt('Processing: @id', ['@id' => $id]));
+          }
           $this->processItem($entity, $data);
           $success = $this->save($id, $entity, $data);
           switch ($success) {
@@ -694,19 +621,19 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * Extending classes should provide the item process method.
    *
-   * @param \Drupal\Core\Entity\ContentEntityInterface $entity
+   * @param \Drupal\Core\Entity\EntityInterface $entity
    *   The entity to process.
    * @param array $data
    *   The data provided from the Unionware API for a single item.
    */
-  abstract protected function processItem(ContentEntityInterface $entity, array $data);
+  abstract protected function processItem(EntityInterface $entity, array $data);
 
   /**
    * Save the entity and store record in sync table.
    *
    * @param string $id
    *   The sync id.
-   * @param \Drupal\Core\Entity\ContentEntityInterface $entity
+   * @param \Drupal\Core\Entity\EntityInterface $entity
    *   The entity to process.
    * @param array $data
    *   The data provided from the Unionware API for a single item.
@@ -714,29 +641,30 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * @return bool
    *   A bool representing success.
    */
-  protected function save($id, ContentEntityInterface $entity, array $data) {
+  protected function save($id, EntityInterface $entity, array $data) {
     return $entity->save();
   }
 
   /**
    * {@inheritdoc}
    */
-  public function syncAccess(ContentEntityInterface $entity) {
+  public function syncAccess(EntityInterface $entity) {
     return empty($entity->syncIsLocked);
   }
 
   /**
    * {@inheritdoc}
    */
-  public function cleanup(array $data) {
+  public function queueCleanup(array $data) {
     $context = $this->getContext($data);
     try {
+      $this->logger->notice('[Sync Cleanup: %plugin_label] CLEANUP: %entity_type.', $context);
       $query = $this->syncStorage->getDataQuery($this->getGroup());
       $this->cleanupQueryAlter($query, $data);
       $results = $query->execute()->fetchAllAssoc('id');
       if (!empty($results)) {
         foreach ($results as $sync) {
-          $this->queueItem->createItem([
+          $this->queue->createItem([
             'plugin_id' => $this->getPluginId(),
             'op' => 'clean',
             'data' => [
@@ -746,7 +674,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
           ]);
         }
         if (!empty($data['_sync_as_batch'])) {
-          $this->buildBatch($this->queueItem, 'runBatch', 'finishCleanupBatch');
+          $this->buildBatch();
         }
       }
     }
@@ -763,7 +691,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * Allow altering of cleanup query.
    */
   protected function cleanupQueryAlter($query, array $data) {
-    $query->condition('sync_data.changed', $data['start'], '<');
+    $query->condition('sync_data.changed', $this->getStartTime(), '<');
     $query->condition('sync.locked', 0);
   }
 
@@ -808,7 +736,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * {@inheritdoc}
    */
-  public function cleanExecute(ContentEntityInterface $entity, $sync, $context) {
+  public function cleanExecute(EntityInterface $entity, $sync, $context) {
     $status = $entity->delete();
     if ($status) {
       // Entity cleanup is handled in hook_entity_delete().
@@ -833,9 +761,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    */
   public function debug() {
     try {
-      $data = $this->getData([
-        '_pager_skip' => TRUE,
-      ]);
+      $data = $this->getData();
       if (!empty($data) && count($data) > $this->maxDebug) {
         $data = array_slice($data, 0, $this->maxDebug);
       }
@@ -870,6 +796,89 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       ];
     }
     return $context;
+  }
+
+  /**
+   * Get the temp storage service.
+   */
+  protected function getTempStore() {
+    return \Drupal::service('user.shared_tempstore')->get('sync');
+  }
+
+  /**
+   * Get the state key.
+   *
+   * @return string
+   *   The state key.
+   */
+  protected function getStateKey() {
+    return 'sync.resource.' . $this->pluginId;
+  }
+
+  /**
+   * Get the start time.
+   */
+  protected function getStartTime() {
+    return $this->state->get($this->getStateKey() . '.start');
+  }
+
+  /**
+   * Set the start time.
+   */
+  protected function setStartTime() {
+    $start = \Drupal::time()->getRequestTime();
+    $this->state->set($this->getStateKey() . '.start', $start);
+    return $this;
+  }
+
+  /**
+   * Set the page count.
+   */
+  protected function getPageCount() {
+    $count = $this->state->get($this->getStateKey() . '.page');
+    return $count ? $count : 1;
+  }
+
+  /**
+   * Increment the page count.
+   */
+  protected function incrementPageCount() {
+    $count = $this->getPageCount();
+    $this->state->set($this->getStateKey() . '.page', $count + 1);
+    return $this;
+  }
+
+  /**
+   * Reset the page count.
+   */
+  protected function resetPageCount() {
+    $this->state->delete($this->getStateKey() . '.page');
+    return $this;
+  }
+
+  /**
+   * Set the process count.
+   */
+  protected function getProcessCount($type = 'success') {
+    $count = $this->state->get($this->getStateKey() . '.process.' . $type);
+    return $count ? $count : 0;
+  }
+
+  /**
+   * Increment the process count.
+   */
+  protected function incrementProcessCount($type = 'success') {
+    $count = $this->getProcessCount($type);
+    $this->state->set($this->getStateKey() . '.process.' . $type, $count + 1);
+    return $this;
+  }
+
+  /**
+   * Reset the process count.
+   */
+  protected function resetProcessCount($type = 'success') {
+    $this->state->delete($this->getStateKey() . '.process.' . $type);
+    return $this;
   }
 
   /**

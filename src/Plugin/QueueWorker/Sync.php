@@ -10,8 +10,14 @@ use Drupal\sync\Plugin\SyncResourceManager;
 
 /**
  * Process a queue of Sync items to process their data.
+ *
+ * @QueueWorker(
+ *   id = "sync",
+ *   title = @Translation("Sync"),
+ *   cron = {"time" = 180}
+ * )
  */
-class SyncQueueWorkerBase extends QueueWorkerBase implements ContainerFactoryPluginInterface {
+class Sync extends QueueWorkerBase implements ContainerFactoryPluginInterface {
 
   /**
    * A logger instance.

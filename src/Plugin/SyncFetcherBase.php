@@ -10,13 +10,6 @@ use Drupal\Component\Plugin\PluginBase;
 abstract class SyncFetcherBase extends PluginBase implements SyncFetcherInterface {
 
   /**
-   * Determines if paged featching is supported.
-   *
-   * @var bool
-   */
-  protected $supportsPaging = FALSE;
-
-  /**
    * Constructs a SyncFetcher object.
    *
    * @param array $configuration
@@ -36,13 +29,6 @@ abstract class SyncFetcherBase extends PluginBase implements SyncFetcherInterfac
    */
   protected function defaultSettings() {
     return [];
-  }
-
-  /**
-   * Check if paged fetching is supported.
-   */
-  public function supportsPaging() {
-    return $this->supportsPaging;
   }
 
   /**

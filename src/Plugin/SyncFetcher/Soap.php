@@ -9,24 +9,10 @@ use Drupal\sync\Plugin\SyncFetcherBase;
  *
  * @SyncFetcher(
  *   id = "soap",
- *   label = @Translation("HTTP"),
+ *   label = @Translation("Soap"),
  * )
  */
 class Soap extends SyncFetcherBase {
-
-  /**
-   * Determines if batch featching is supported.
-   *
-   * @var bool
-   */
-  protected $supportsPaging = TRUE;
-
-  /**
-   * The bookmark key value.
-   *
-   * @var string
-   */
-  protected $bookmarkKey = NULL;
 
   /**
    * {@inheritdoc}
@@ -36,14 +22,38 @@ class Soap extends SyncFetcherBase {
       'url' => '',
       'options' => [],
       'params' => [],
-      // Example filters: [['Field' => 'Description', 'Criteria' => '*PIPE*']].
-      'filters' => [],
-      'bookmarkKey' => '',
-      'size' => 100,
       'resource_name' => NULL,
       'login' => NULL,
       'password' => NULL,
     ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getUrl() {
+    return $this->configuration['url'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setUrl($url) {
+    $this->configuration['url'] = $url;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getResourceName() {
+    return $this->configuration['resource_name'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setResourceName($resource_name) {
+    $this->configuration['resource_name'] = $resource_name;
   }
 
   /**
@@ -90,67 +100,21 @@ class Soap extends SyncFetcherBase {
    * {@inheritdoc}
    */
   public function getParams() {
-    $params = $this->configuration['params'];
-    $params += [
-      'filter' => $this->configuration['filters'],
-      'filter' => [
-        'Field' => 'Show_on_Web',
-        'Criteria' => FALSE,
-      ],
-      'setSize' => $this->configuration['size'],
-    ];
-    if (!empty($this->bookmarkKey)) {
-      $params += [
-        'bookmarkKey' => $this->bookmarkKey,
-      ];
-    }
-    return $params;
-  }
-
-  /**
-   * Called when paging is enabled.
-   *
-   * @return array|null
-   *   Should return results of paged fetch. If null or empty array, paging will
-   *   end.
-   */
-  public function fetchPage($previous_data, $page) {
-    if ($page == 4) {
-      return [];
-    }
-    if (!empty($previous_data) && !empty($this->configuration['bookmarkKey'])) {
-      $item = end($previous_data);
-      if (!empty($item[$this->configuration['bookmarkKey']])) {
-        $this->bookmarkKey = $item[$this->configuration['bookmarkKey']];
-      }
-      return $this->fetch();
-    }
-    return [];
+    return $this->configuration['params'];
   }
 
   /**
    * {@inheritdoc}
    */
   public function fetch() {
-    $client = new \SoapClient($this->configuration['url'], $this->getOptions());
-    if (!empty($this->configuration['resource_name'])) {
-      $data = $client->__soapCall($this->configuration['resource_name'], [
+    $client = new \SoapClient($this->getUrl(), $this->getOptions());
+    $data = [];
+    if (!empty($this->getResourceName())) {
+      $results = $client->__soapCall($this->getResourceName(), [
         'parameters' => $this->getParams(),
       ]);
-      if (is_object($data) && isset($data->{$this->configuration['resource_name'] . 'Result'})) {
-        $data = $data->{$this->configuration['resource_name'] . 'Result'};
-      }
-      else {
-        $data = [];
-      }
-    }
-    else {
-      $data = $client->ReadMultiple($this->getParams());
-      if (is_object($data) && isset($data->{'ReadMultiple_Result'}->{'ItemList'})) {
-        $data = $data->{'ReadMultiple_Result'}->{'ItemList'};
-      }
-      else {
-        $data = [];
+      if (is_object($results) && isset($results->{$this->getResourceName() . 'Result'})) {
+        $data = $results->{$this->getResourceName() . 'Result'};
       }
     }
     return $data;
