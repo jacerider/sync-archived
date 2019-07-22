@@ -38,6 +38,15 @@ class SyncResourceManager extends DefaultPluginManager {
   }
 
   /**
+   * {@inheritdoc}
+   */
+  public function getDefinitions() {
+    $definitions = parent::getDefinitions();
+    uasort($definitions, [get_class($this), 'sort']);
+    return $definitions;
+  }
+
+  /**
    * Get an instance of all active plugins.
    */
   public function getActive() {
@@ -256,6 +265,32 @@ class SyncResourceManager extends DefaultPluginManager {
     $state = \Drupal::state();
     $key = self::getStateKey($definition);
     return $state->delete($key) && $state->delete($key . '.end');
+  }
+
+  /**
+   * Sorts active blocks by weight; sorts inactive blocks by name.
+   */
+  public static function sort(array $a, array $b) {
+    // Separate enabled from disabled.
+    $status = (int) $b['status'] - (int) $a['status'];
+    if ($status !== 0) {
+      return $status;
+    }
+
+    // Separate cron from cronless.
+    $cron = !empty($b['cron']) - !empty($a['cron']);
+    if ($cron !== 0) {
+      return $cron;
+    }
+
+    // Sort by weight.
+    $weight = $a['weight'] - $b['weight'];
+    if ($weight) {
+      return $weight;
+    }
+
+    // Sort by label.
+    return strcmp($a['label'], $b['label']);
   }
 
 }

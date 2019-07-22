@@ -45,6 +45,14 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
    */
   public function setFilters($filters) {
     $this->configuration['filters'] = $filters;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function resetFilters() {
+    return $this->setFilters([]);
   }
 
   /**
@@ -55,6 +63,7 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
       'Field' => $field,
       'Criteria' => $criteria,
     ];
+    return $this;
   }
 
   /**
@@ -69,6 +78,7 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
    */
   public function setSize($size) {
     $this->configuration['size'] = $size;
+    return $this;
   }
 
   /**
@@ -99,9 +109,6 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
    * {@inheritdoc}
    */
   public function fetchPage($previous_data, $page) {
-    if ($page >= 4) {
-      return [];
-    }
     if (!empty($previous_data) && !empty($this->configuration['bookmark_key'])) {
       $item = end($previous_data);
       if (!empty($item[$this->configuration['bookmark_key']])) {
@@ -121,6 +128,9 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
     $results = $client->ReadMultiple($this->getParams());
     if (is_object($results) && isset($results->{'ReadMultiple_Result'}->{$this->getResourceName()})) {
       $data = $results->{'ReadMultiple_Result'}->{$this->getResourceName()};
+      if (!is_array($data)) {
+        $data = [$data];
+      }
     }
     return $data;
   }

@@ -22,6 +22,27 @@ use Drupal\Core\State\StateInterface;
 abstract class SyncResourceBase extends PluginBase implements SyncResourceInterface, ContainerFactoryPluginInterface {
 
   /**
+   * The sync client definition.
+   *
+   * @var array
+   */
+  protected $client;
+
+  /**
+   * The sync fetcher.
+   *
+   * @var \Drupal\sync\Plugin\SyncFetcherInterface
+   */
+  protected $fetcher;
+
+  /**
+   * The sync parser.
+   *
+   * @var \Drupal\sync\Plugin\SyncParserInterface
+   */
+  protected $parser;
+
+  /**
    * The entity type manager service.
    *
    * @var \Drupal\Core\Entity\EntityTypeManagerInterface
@@ -202,6 +223,49 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
+   * The sync client.
+   *
+   * @return array
+   *   The client definition.
+   */
+  public function getClient() {
+    if (!isset($this->client)) {
+      $this->client = $this->syncClientManager->getDefinition($this->getPluginDefinition()['client']);
+    }
+    return $this->client;
+  }
+
+  /**
+   * The sync fetcher.
+   *
+   * @return \Drupal\sync\Plugin\SyncFetcherInterface
+   *   The sync fetcher plugin.
+   */
+  public function getFetcher() {
+    if (!isset($this->fetcher)) {
+      $client = $this->getClient();
+      $this->fetcher = $this->syncFetcherManager->createInstance($client['fetcher'], $client['fetcher_settings']);
+      $this->alterFetcher($this->fetcher);
+    }
+    return $this->fetcher;
+  }
+
+  /**
+   * The sync parser.
+   *
+   * @return \Drupal\sync\Plugin\SyncParserInterface
+   *   The sync fetcher plugin.
+   */
+  public function getParser() {
+    if (!isset($this->parser)) {
+      $client = $this->getClient();
+      $this->parser = $this->syncParserManager->createInstance($client['parser'], $client['parser_settings']);
+      $this->alterParser($this->parser);
+    }
+    return $this->parser;
+  }
+
+  /**
    * {@inheritdoc}
    */
   public function getLastStart() {
@@ -257,7 +321,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * {@inheritdoc}
    */
-  protected function queueProcess($data, array $additional = []) {
+  protected function queueProcess(array $data, array $additional = []) {
     foreach ($data as $item_data) {
       $this->queue->createItem([
         'plugin_id' => $this->getPluginId(),
@@ -289,9 +353,52 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
+   * Fetch the data.
+   */
+  protected function fetchData($additional = []) {
+    $data = $this->getData();
+    if (!empty($data) || $this->shouldRunOnEmpty()) {
+      $this->queueStart($additional);
+      $this->queueProcess($data, $additional);
+      $fetcher = $this->getFetcher();
+      if ($fetcher instanceof SyncFetcherPagedInterface) {
+        $this->queueFetchPage($data, $additional);
+      }
+      else {
+        $this->queueEnd($additional);
+      }
+    }
+  }
+
+  /**
+   * Get the data.
+   *
+   * Does not support paging. See fetchData for paging support.
+   *
+   * @return array
+   *   An array of data.
+   */
+  public function getData() {
+    try {
+      $this->logger->notice('[Sync Data: %plugin_label] LOAD DATA: %entity_type.', $this->getContext());
+      $data = $this->getFetcher()->fetch();
+      $data = $this->getParser()->parse($data);
+      $data = $this->filter($data);
+      return $data;
+    }
+    catch (\Exception $e) {
+      $this->logger->error('[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
+        '@message' => $e->getMessage(),
+      ]);
+      drupal_set_message($e->getMessage(), 'error');
+    }
+    return [];
+  }
+
+  /**
    * Add a pager batch item.
    */
-  protected function queueFetchPage($data, SyncFetcherInterface $fetcher, SyncParserInterface $parser, $additional = []) {
+  protected function queueFetchPage($data, $additional = []) {
     $this->queue->createItem([
       'plugin_id' => $this->getPluginId(),
       'op' => 'fetchPage',
@@ -299,8 +406,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       'data' => [
         'data' => $data,
         'additional' => $additional,
-        'fetcher' => $fetcher,
-        'parser' => $parser,
       ],
     ]);
   }
@@ -313,8 +418,8 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $this->incrementPageCount();
     $previous_data = $batch_data['data'];
     $additional = $batch_data['additional'];
-    $fetcher = $batch_data['fetcher'];
-    $parser = $batch_data['parser'];
+    $fetcher = $this->getFetcher();
+    $parser = $this->getParser();
     if (PHP_SAPI === 'cli' && function_exists('drush_print')) {
       if ($page > 1) {
         $red = "\033[31;40m\033[1m%s\033[0m";
@@ -336,11 +441,10 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       '%new_data_count' => count($new_data),
     ];
     if (!empty($new_data)) {
-      ksm($new_data);
       // We may have more data to fetch, so run again.
       $this->logger->notice('[Sync Fetch: %plugin_label] PAGE %page: %entity_type with %new_data_count records added for processing.', $context);
       $this->queueProcess($new_data, $additional);
-      $this->queueFetchPage($new_data, $fetcher, $parser, $additional);
+      $this->queueFetchPage($new_data, $additional);
     }
     else {
       // We have all the data we can get.
@@ -468,83 +572,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * Fetch the data.
-   */
-  protected function fetchData($additional = [], $client_id = NULL, $fetcher_settings = [], $parser_settings = []) {
-    // Get client.
-    $client_id = $client_id ?: $this->getPluginDefinition()['client'];
-    $client = $this->syncClientManager->getDefinition($client_id);
-    // Get fetcher.
-    $settings = NestedArray::mergeDeep($client['fetcher_settings'], $fetcher_settings);
-    /** @var \Drupal\sync\Plugin\SyncFetcherInterface $fetcher */
-    $fetcher = $this->syncFetcherManager->createInstance($client['fetcher'], $settings);
-    $this->alterFetcher($fetcher);
-    // Get parser.
-    $settings = NestedArray::mergeDeep($client['parser_settings'], $parser_settings);
-    $parser = $this->syncParserManager->createInstance($client['parser'], $settings);
-    $this->alterParser($parser);
-
-    $data = $this->loadData($client, $fetcher, $parser);
-    if (!empty($data) || $this->shouldRunOnEmpty()) {
-      $this->queueStart($additional);
-      $this->queueProcess($data, $additional);
-      if ($fetcher instanceof SyncFetcherPagedInterface) {
-        $this->queueFetchPage($data, $fetcher, $parser, $additional);
-      }
-      else {
-        $this->queueEnd($additional);
-      }
-    }
-  }
-
-  /**
-   * Get the data.
-   *
-   * Does not support paging. See fetchData for paging support.
-   *
-   * @return array
-   *   An array of data.
-   */
-  protected function getData($client_id = NULL, $fetcher_settings = [], $parser_settings = []) {
-    // Get client.
-    $client_id = $client_id ?: $this->getPluginDefinition()['client'];
-    $client = $this->syncClientManager->getDefinition($client_id);
-    // Get fetcher.
-    $settings = NestedArray::mergeDeep($client['fetcher_settings'], $fetcher_settings);
-    $fetcher = $this->syncFetcherManager->createInstance($client['fetcher'], $settings);
-    $this->alterFetcher($fetcher);
-    // Get parser.
-    $settings = NestedArray::mergeDeep($client['parser_settings'], $parser_settings);
-    $parser = $this->syncParserManager->createInstance($client['parser'], $settings);
-    $this->alterParser($parser);
-    return $this->loadData($client, $fetcher, $parser);
-  }
-
-  /**
-   * Load the data.
-   *
-   * @return array
-   *   An array of data.
-   */
-  protected function loadData(array $client, SyncFetcherInterface $fetcher, SyncParserInterface $parser) {
-    $this->alterParser($parser);
-    try {
-      $this->logger->notice('[Sync Data: %plugin_label] LOAD DATA: %entity_type.', $this->getContext());
-      $data = $fetcher->fetch();
-      $data = $parser->parse($data);
-      $data = $this->filter($data);
-      return $data;
-    }
-    catch (\Exception $e) {
-      $this->logger->error('[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
-        '@message' => $e->getMessage(),
-      ]);
-      drupal_set_message($e->getMessage(), 'error');
-    }
-    return [];
-  }
-
-  /**
    * {@inheritdoc}
    */
   public function filter(array $data) {
@@ -573,7 +600,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
             drush_print(dt('Processing: @id', ['@id' => $id]));
           }
           $this->processItem($entity, $data);
-          $success = $this->save($id, $entity, $data);
+          $success = $this->save($entity, $data);
           switch ($success) {
             case SAVED_NEW:
               $this->logger->notice('[Sync Item: %plugin_label] NEW: %id for %entity_type:%bundle', $context);
@@ -631,8 +658,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * Save the entity and store record in sync table.
    *
-   * @param string $id
-   *   The sync id.
    * @param \Drupal\Core\Entity\EntityInterface $entity
    *   The entity to process.
    * @param array $data
@@ -641,7 +666,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * @return bool
    *   A bool representing success.
    */
-  protected function save($id, EntityInterface $entity, array $data) {
+  protected function save(EntityInterface $entity, array $data) {
     return $entity->save();
   }
 
