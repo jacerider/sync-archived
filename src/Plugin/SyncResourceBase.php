@@ -384,6 +384,10 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $data = $this->getFetcher()->fetch();
       $data = $this->getParser()->parse($data);
       $data = $this->filter($data);
+      $this->alterData($data);
+      foreach ($data as &$item) {
+        $this->alterItem($item);
+      }
       return $data;
     }
     catch (\Exception $e) {
@@ -779,6 +783,18 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * {@inheritdoc}
    */
   public function alterParser(SyncParserInterface $parser) {
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function alterData(array &$data) {
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function alterItem(array &$data) {
   }
 
   /**
