@@ -93,9 +93,8 @@ class SyncEntityProvider implements SyncEntityProviderInterface {
    * {@inheritdoc}
    */
   public function getOrCreate($id, $entity_type, $bundle, array $values = [], $group = 'default') {
-    $entity = $this->get($id, $entity_type, $bundle, $values, $group);
-    if (empty($entity)) {
-      $entity = $this->getNew($id, $entity_type, $bundle, $values, $group);
+    $entity = $this->getOrNew($id, $entity_type, $bundle, $values, $group);
+    if ($entity->isNew()) {
       $entity->save();
     }
     return $entity;
