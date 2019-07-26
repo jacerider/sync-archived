@@ -106,6 +106,29 @@ class Soap extends SyncFetcherBase {
   /**
    * {@inheritdoc}
    */
+  public function setParams($params) {
+    $this->configuration['params'] = $params;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function resetParams() {
+    return $this->setParams([]);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function addParam($key, $value) {
+    $this->configuration['params'][$key] = $value;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function fetch() {
     $client = new \SoapClient($this->getUrl(), $this->getOptions());
     $data = [];

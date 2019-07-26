@@ -19,7 +19,7 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
    *
    * @var string
    */
-  protected $bookmarkKey = NULL;
+  protected $bookmarkKey = '';
 
   /**
    * {@inheritdoc}
@@ -28,8 +28,11 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
     return parent::defaultSettings() + [
       // Example filters: [['Field' => 'Description', 'Criteria' => '*PIPE*']].
       'filters' => [],
+      'resource_segment' => 'Page',
+      'resource_function' => 'ReadMultiple',
+      'resource_function_result' => 'ReadMultiple_Result',
       'bookmark_key' => 'Key',
-      'size' => 200,
+      'size' => 100,
     ];
   }
 
@@ -69,6 +72,48 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
   /**
    * {@inheritdoc}
    */
+  public function getResourceSegment() {
+    return $this->configuration['resource_segment'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setResourceSegment($resource_segment) {
+    $this->configuration['resource_segment'] = $resource_segment;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getResourceFunction() {
+    return $this->configuration['resource_function'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setResourceFunction($resource_function) {
+    $this->configuration['resource_function'] = $resource_function;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getResourceFunctionResult() {
+    return $this->configuration['resource_function_result'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setResourceFunctionResult($resource_function_result) {
+    $this->configuration['resource_function_result'] = $resource_function_result;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getSize() {
     return $this->configuration['size'];
   }
@@ -85,24 +130,19 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
    * {@inheritdoc}
    */
   public function getUrl() {
-    return $this->configuration['url'] . '/' . $this->getResourceName();
+    return $this->configuration['url'] . '/' . $this->getResourceSegment() . '/' . $this->getResourceName();
   }
 
   /**
    * {@inheritdoc}
    */
   public function getParams() {
-    $params = parent::getParams();
-    $params += [
-      'filter' => $this->getFilters(),
-      'setSize' => $this->getSize(),
-    ];
+    $this->addParam('filter', $this->getFilters());
+    $this->addParam('setSize', $this->getSize());
     if (!empty($this->bookmarkKey)) {
-      $params += [
-        'bookmarkKey' => $this->bookmarkKey,
-      ];
+      $this->addParam('bookmarkKey', $this->bookmarkKey);
     }
-    return $params;
+    return parent::getParams();
   }
 
   /**
@@ -125,9 +165,11 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
   public function fetch() {
     $data = [];
     $client = new \SoapClient($this->getUrl(), $this->getOptions());
-    $results = $client->ReadMultiple($this->getParams());
-    if (is_object($results) && isset($results->{'ReadMultiple_Result'}->{$this->getResourceName()})) {
-      $data = $results->{'ReadMultiple_Result'}->{$this->getResourceName()};
+    $function = $this->getResourceFunction();
+    $function_result = $this->getResourceFunctionResult();
+    $results = $client->{$function}($this->getParams());
+    if ($function_result && is_object($results) && isset($results->{$function_result}->{$this->getResourceName()})) {
+      $data = $results->{$function_result}->{$this->getResourceName()};
       if (!is_array($data)) {
         $data = [$data];
       }

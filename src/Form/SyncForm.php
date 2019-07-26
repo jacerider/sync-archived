@@ -77,16 +77,26 @@ class SyncForm extends FormBase {
       ],
     ];
     foreach ($definitions as $definition) {
-      $entity_definition = $this->entityManager->getDefinition($definition['entity_type']);
-      $bundle_definitions = $this->entityManager->getBundleInfo($definition['entity_type']);
-      $enabled = !empty($definition['status']);
-      $row = [];
-      $row['label']['#markup'] = $this->t('<strong>@label</strong> <small>(@id)</small><br><small>Entity: @entity<br>Type: @bundle</small>', [
+      if (!empty($definition['no_ui'])) {
+        continue;
+      }
+      $context = [
         '@label' => $definition['label'],
         '@id' => $definition['id'],
-        '@entity' => $entity_definition->getLabel(),
-        '@bundle' => isset($bundle_definitions[$definition['bundle']]) ? $bundle_definitions[$definition['bundle']]['label'] : 'None Specified',
-      ]);
+        '@entity' => '-',
+        '@bundle' => '-',
+      ];
+      if ($definition['entity_type']) {
+        $entity_definition = $this->entityManager->getDefinition($definition['entity_type']);
+        $bundle_definitions = $this->entityManager->getBundleInfo($definition['entity_type']);
+        $context = [
+          '@entity' => $entity_definition->getLabel(),
+          '@bundle' => isset($bundle_definitions[$definition['bundle']]) ? $bundle_definitions[$definition['bundle']]['label'] : 'None Specified',
+        ] + $context;
+      }
+      $enabled = !empty($definition['status']);
+      $row = [];
+      $row['label']['#markup'] = $this->t('<strong>@label</strong> <small>(@id)</small><br><small>Entity: @entity<br>Type: @bundle</small>', $context);
       $row['clean']['#markup'] = '<small>' . (!empty($definition['cleanup']) ? $this->t('Yes') : $this->t('No')) . '</small>';
       if (($times = $this->syncResourceManager->getCronTimes($definition)) && ($days = $this->syncResourceManager->getCronDays($definition))) {
         $row['times']['#markup'] = '<em>' . implode(', ', array_map(function ($time) {

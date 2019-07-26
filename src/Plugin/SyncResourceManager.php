@@ -28,11 +28,12 @@ class SyncResourceManager extends DefaultPluginManager {
     $this->setCacheBackend($cache_backend, 'sync_sync_resource_plugins');
     $this->defaults = [
       'status' => 1,
-      'entity_type' => 'node',
+      'entity_type' => '',
       'bundle' => '',
       'cron' => '00:00',
       'day' => 'mon,tue,wed,thu,fri',
-      'cleanup' => TRUE,
+      'no_ui' => FALSE,
+      'cleanup' => FALSE,
       'weight' => 0,
     ];
   }

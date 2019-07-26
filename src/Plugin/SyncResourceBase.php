@@ -11,7 +11,6 @@ use Drupal\Core\Queue\QueueInterface;
 use Drupal\sync\SyncHaltException;
 use Drupal\sync\SyncEntityProviderInterface;
 use Drupal\Core\Entity\EntityInterface;
-use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\sync\SyncStorageInterface;
 use Drupal\Core\State\StateInterface;
@@ -218,7 +217,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * {@inheritdoc}
    */
-  public function getGroup() {
+  public function getGroup(array $data) {
     return $this->getPluginId();
   }
 
@@ -356,16 +355,26 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * Fetch the data.
    */
   protected function fetchData($additional = []) {
-    $data = $this->getData();
-    if (!empty($data) || $this->shouldRunOnEmpty()) {
-      $this->queueStart($additional);
-      $this->queueProcess($data, $additional);
-      $fetcher = $this->getFetcher();
-      if ($fetcher instanceof SyncFetcherPagedInterface) {
-        $this->queueFetchPage($data, $additional);
+    try {
+      $data = $this->getData();
+      if (!empty($data) || $this->shouldRunOnEmpty()) {
+        $this->queueStart($additional);
+        $this->queueProcess($data, $additional);
+        $fetcher = $this->getFetcher();
+        if ($fetcher instanceof SyncFetcherPagedInterface) {
+          $this->queueFetchPage($data, $additional);
+        }
+        else {
+          $this->queueEnd($additional);
+        }
       }
-      else {
-        $this->queueEnd($additional);
+    }
+    catch (\Exception $e) {
+      $this->logger->error('[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
+        '@message' => $e->getMessage(),
+      ]);
+      if (!empty($additional['_sync_as_batch'])) {
+        drupal_set_message($e->getMessage(), 'error');
       }
     }
   }
@@ -379,24 +388,17 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    *   An array of data.
    */
   public function getData() {
-    try {
-      $this->logger->notice('[Sync Data: %plugin_label] LOAD DATA: %entity_type.', $this->getContext());
-      $data = $this->getFetcher()->fetch();
+    $this->logger->notice('[Sync Data: %plugin_label] LOAD DATA: %entity_type.', $this->getContext());
+    $data = $this->getFetcher()->fetch();
+    if (!empty($data)) {
       $data = $this->getParser()->parse($data);
       $data = $this->filter($data);
       $this->alterData($data);
       foreach ($data as &$item) {
         $this->alterItem($item);
       }
-      return $data;
     }
-    catch (\Exception $e) {
-      $this->logger->error('[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
-        '@message' => $e->getMessage(),
-      ]);
-      drupal_set_message($e->getMessage(), 'error');
-    }
-    return [];
+    return $data;
   }
 
   /**
@@ -415,49 +417,83 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
+   * Log a message if called during drush operations.
+   */
+  protected function drushLog($string, array $args = [], $type = 'info') {
+    if (PHP_SAPI === 'cli' && function_exists('drush_print')) {
+      $red = "\033[31;40m\033[1m%s\033[0m";
+      $yellow = "\033[1;33;40m\033[1m%s\033[0m";
+      $green = "\033[1;32;40m\033[1m%s\033[0m";
+      switch ($type) {
+        case 'error':
+          $color = $red;
+          break;
+
+        case 'warning':
+          $color = $yellow;
+          break;
+
+        case 'success':
+          $color = $green;
+          break;
+
+        default:
+          $color = "%s";
+          break;
+      }
+      drush_print(strip_tags(sprintf($color, dt($string, $args))));
+    }
+  }
+
+  /**
    * {@inheritdoc}
    */
   public function fetchPage(array $batch_data) {
-    $page = $this->getPageCount();
-    $this->incrementPageCount();
-    $previous_data = $batch_data['data'];
-    $additional = $batch_data['additional'];
-    $fetcher = $this->getFetcher();
-    $parser = $this->getParser();
-    if (PHP_SAPI === 'cli' && function_exists('drush_print')) {
-      if ($page > 1) {
-        $red = "\033[31;40m\033[1m%s\033[0m";
-        $yellow = "\033[1;33;40m\033[1m%s\033[0m";
-        $green = "\033[1;32;40m\033[1m%s\033[0m";
-        drush_log(sprintf($green, dt('Fetching... [Page: @page | Success: @success | Skipped: @skip | Failed: @fail]', [
-          '@page' => $page,
-          '@success' => $this->getProcessCount('success'),
-          '@skip' => $this->getProcessCount('skip'),
-          '@fail' => $this->getProcessCount('fail'),
-        ])), 'ok');
+    try {
+      $page = $this->getPageCount();
+      $this->incrementPageCount();
+      $previous_data = $batch_data['data'];
+      $additional = $batch_data['additional'];
+      $fetcher = $this->getFetcher();
+      $parser = $this->getParser();
+      $this->drushLog('Fetching... [Page: @page | Success: @success | Skipped: @skip | Failed: @fail]', [
+        '@page' => $page,
+        '@success' => $this->getProcessCount('success'),
+        '@skip' => $this->getProcessCount('skip'),
+        '@fail' => $this->getProcessCount('fail'),
+      ], 'success');
+      $new_data = $fetcher->fetchPage($previous_data, $page);
+      $new_data = $parser->parse($new_data);
+      $new_data = $this->filter($new_data);
+      $this->alterData($new_data);
+      foreach ($new_data as &$item) {
+        $this->alterItem($item);
+      }
+      $context = $this->getContext() + [
+        '%page' => $page,
+        '%new_data_count' => count($new_data),
+      ];
+      if (!empty($new_data)) {
+        // We may have more data to fetch, so run again.
+        $this->logger->notice('[Sync Fetch: %plugin_label] PAGE %page: %entity_type with %new_data_count records added for processing.', $context);
+        $this->queueProcess($new_data, $additional);
+        $this->queueFetchPage($new_data, $additional);
+      }
+      else {
+        // We have all the data we can get.
+        $this->logger->notice('[Sync Fetch: %plugin_label] PAGE FINISH: %entity_type.', $context);
+        $this->resetPageCount();
+        $this->queueEnd($additional);
+      }
+      if (!empty($additional['_sync_as_batch'])) {
+        $this->buildBatch();
       }
     }
-    $new_data = $fetcher->fetchPage($previous_data, $page);
-    $new_data = $parser->parse($new_data);
-    $new_data = $this->filter($new_data);
-    $context = $this->getContext() + [
-      '%page' => $page,
-      '%new_data_count' => count($new_data),
-    ];
-    if (!empty($new_data)) {
-      // We may have more data to fetch, so run again.
-      $this->logger->notice('[Sync Fetch: %plugin_label] PAGE %page: %entity_type with %new_data_count records added for processing.', $context);
-      $this->queueProcess($new_data, $additional);
-      $this->queueFetchPage($new_data, $additional);
-    }
-    else {
-      // We have all the data we can get.
-      $this->logger->notice('[Sync Fetch: %plugin_label] PAGE FINISH: %entity_type.', $context);
-      $this->resetPageCount();
-      $this->queueEnd($additional);
-    }
-    if (!empty($additional['_sync_as_batch'])) {
-      $this->buildBatch();
+    catch (\Exception $e) {
+      $this->logger->error('[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
+        '@message' => $e->getMessage(),
+      ]);
+      drupal_set_message($e->getMessage(), 'error');
     }
   }
 
@@ -584,9 +620,19 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
 
   /**
    * {@inheritdoc}
+   *
+   * @return mixed
+   *   Will return FALSE if entity type and bundle was not specified. Will retur
+   *   NULL if entity could not be loaded. Will return entity if found/created.
    */
   public function loadEntity(array $data) {
-    return $this->syncEntityProvider->getOrNew($this->id($data), $this->getEntityType(), $this->getBundle($data), [], $this->getGroup());
+    $entity = FALSE;
+    $entity_type = $this->getEntityType();
+    $bundle = $this->getBundle($data);
+    if ($entity_type) {
+      $entity = $this->syncEntityProvider->getOrNew($this->id($data), $entity_type, $bundle, [], $this->getGroup($data));
+    }
+    return $entity;
   }
 
   /**
@@ -598,11 +644,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $context['%id'] = $id;
     $entity = $this->loadEntity($data);
     try {
-      if ($entity) {
+      if ($entity instanceof EntityInterface) {
         if ($this->syncAccess($entity)) {
-          if (PHP_SAPI === 'cli' && function_exists('drush_print')) {
-            drush_print(dt('Processing: @id', ['@id' => $id]));
-          }
+          $this->drushLog('Processing: @id', ['@id' => $id]);
           $this->processItem($entity, $data);
           $success = $this->save($entity, $data);
           switch ($success) {
@@ -628,13 +672,21 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         }
       }
       else {
-        throw new \Exception('Entity could not be loaded.');
+        if ($entity === FALSE) {
+          // Entity type/bundle not specified. We want to skip silently without
+          // errors.
+        }
+        else {
+          throw new \Exception('Entity could not be loaded.');
+        }
       }
     }
     catch (SyncHaltException $e) {
       $this->logger->notice('[Sync Item Skip: %plugin_label] SKIP: %id for %entity_type:%bundle', $context);
       // We need to make sure we have updated this record when skipping.
-      $this->syncStorage->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
+      if (!empty($entity->id())) {
+        $this->syncStorage->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
+      }
       if ($data['_sync_as_batch']) {
         // Send up to runBatch.
         throw new SyncHaltException($e->getMessage());
@@ -688,7 +740,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $context = $this->getContext($data);
     try {
       $this->logger->notice('[Sync Cleanup: %plugin_label] CLEANUP: %entity_type.', $context);
-      $query = $this->syncStorage->getDataQuery($this->getGroup());
+      $query = $this->syncStorage->getDataQuery($this->getGroup($data));
       $this->cleanupQueryAlter($query, $data);
       $results = $query->execute()->fetchAllAssoc('id');
       if (!empty($results)) {

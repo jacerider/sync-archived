@@ -72,8 +72,7 @@ class SyncEntityProvider implements SyncEntityProviderInterface {
       }
       // Create sync record so it can be retrieved faster next time.
       // @see sync_entity_update().
-      $entity->__sync_id = $id;
-      $entity->__sync_group = $group;
+      $this->attachProperties($entity, $id, $group);
     }
     return $entity;
   }

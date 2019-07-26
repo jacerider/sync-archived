@@ -38,6 +38,13 @@ class SyncResource extends Plugin {
   public $status = TRUE;
 
   /**
+   * A boolean indicating if plugin should show in UI.
+   *
+   * @var bool
+   */
+  public $no_ui = FALSE;
+
+  /**
    * A boolean indicating if plugin should execute cleanup operations.
    *
    * @var bool
