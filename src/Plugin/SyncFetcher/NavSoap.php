@@ -33,6 +33,7 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
       'resource_function_result' => 'ReadMultiple_Result',
       'bookmark_key' => 'Key',
       'size' => 100,
+      'page_limit' => 0,
     ];
   }
 
@@ -129,6 +130,21 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
   /**
    * {@inheritdoc}
    */
+  public function getPageLimit() {
+    return $this->configuration['page_limit'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setPageLimit($limit) {
+    $this->configuration['page_limit'] = $limit;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getUrl() {
     return $this->configuration['url'] . '/' . $this->getResourceSegment() . '/' . $this->getResourceName();
   }
@@ -149,6 +165,9 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
    * {@inheritdoc}
    */
   public function fetchPage($previous_data, $page) {
+    if (!empty($this->getPageLimit()) && $page > $this->getPageLimit()) {
+      return [];
+    }
     if (!empty($previous_data) && !empty($this->configuration['bookmark_key'])) {
       $item = end($previous_data);
       if (!empty($item[$this->configuration['bookmark_key']])) {
