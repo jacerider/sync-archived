@@ -165,7 +165,7 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
    * {@inheritdoc}
    */
   public function fetchPage($previous_data, $page) {
-    if (!empty($this->getPageLimit()) && $page > $this->getPageLimit()) {
+    if (!empty($this->getPageLimit()) && $page >= $this->getPageLimit()) {
       return [];
     }
     if (!empty($previous_data) && !empty($this->configuration['bookmark_key'])) {
