@@ -392,11 +392,11 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $data = $this->getFetcher()->fetch();
     if (!empty($data)) {
       $data = $this->getParser()->parse($data);
-      $data = $this->filter($data);
       $this->alterData($data);
       foreach ($data as &$item) {
         $this->alterItem($item);
       }
+      $data = $this->filter($data);
     }
     return $data;
   }
@@ -464,16 +464,20 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       ], 'success');
       $new_data = $fetcher->fetchPage($previous_data, $page);
       $new_data = $parser->parse($new_data);
-      $new_data = $this->filter($new_data);
+      // There are times when filtering may remove all the results. Because of
+      // this, we want to use the pre-filtered data to determine if we should
+      // continue filtering.
+      $new_data_before_filtering = $new_data;
       $this->alterData($new_data);
       foreach ($new_data as &$item) {
         $this->alterItem($item);
       }
+      $new_data = $this->filter($new_data);
       $context = $this->getContext() + [
         '%page' => $page,
         '%new_data_count' => count($new_data),
       ];
-      if (!empty($new_data)) {
+      if (!empty($new_data_before_filtering)) {
         // We may have more data to fetch, so run again.
         $this->logger->notice('[Sync Fetch: %plugin_label] PAGE %page: %entity_type with %new_data_count records added for processing.', $context);
         $this->queueProcess($new_data, $additional);
