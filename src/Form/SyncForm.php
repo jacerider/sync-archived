@@ -96,7 +96,7 @@ class SyncForm extends FormBase {
       }
       $enabled = !empty($definition['status']);
       $row = [];
-      $row['label']['#markup'] = $this->t('<strong>@label</strong> <small>(@id)</small><br><small>Entity: @entity<br>Type: @bundle</small>', $context);
+      $row['label']['#markup'] = $this->t('<strong>@label</strong> <small>(@id)</small><br><small>Entity: @entity<br>Bundle: @bundle</small>', $context);
       $row['clean']['#markup'] = '<small>' . (!empty($definition['cleanup']) ? $this->t('Yes') : $this->t('No')) . '</small>';
       if (($times = $this->syncResourceManager->getCronTimes($definition)) && ($days = $this->syncResourceManager->getCronDays($definition))) {
         $row['times']['#markup'] = '<em>' . implode(', ', array_map(function ($time) {
