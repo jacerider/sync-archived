@@ -1,0 +1,6 @@
+# Form routing definition
+sync.sync:
+  title: 'Resources'
+  route_name: sync.sync
+  base_route: sync.sync
+  weight: -10
