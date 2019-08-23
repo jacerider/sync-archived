@@ -8,7 +8,8 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\sync\SyncClientManagerInterface;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Drupal\Core\Queue\QueueInterface;
-use Drupal\sync\SyncHaltException;
+use Drupal\sync\SyncSkipException;
+use Drupal\sync\SyncFailException;
 use Drupal\sync\SyncEntityProviderInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -393,9 +394,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     if (!empty($data)) {
       $data = $this->getParser()->parse($data);
       $this->alterData($data);
-      foreach ($data as &$item) {
-        $this->alterItem($item);
-      }
       $data = $this->filter($data);
     }
     return $data;
@@ -469,9 +467,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       // continue filtering.
       $new_data_before_filtering = $new_data;
       $this->alterData($new_data);
-      foreach ($new_data as &$item) {
-        $this->alterItem($item);
-      }
       $new_data = $this->filter($new_data);
       $context = $this->getContext() + [
         '%page' => $page,
@@ -590,14 +585,14 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
           $this->incrementProcessCount('success');
         }
       }
-      catch (SyncHaltException $e) {
-        drupal_set_message($e->getMessage(), 'error');
+      catch (SyncSkipException $e) {
+        drupal_set_message($e->getMessage(), 'warning');
         $this->queue->deleteItem($item);
         if (empty($item->data['no_count'])) {
           $this->incrementProcessCount('skip');
         }
       }
-      catch (SuspendQueueException $e) {
+      catch (SyncFailException $e) {
         drupal_set_message($e->getMessage(), 'error');
         $this->queue->deleteItem($item);
         if (empty($item->data['no_count'])) {
@@ -651,6 +646,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       if ($entity instanceof EntityInterface) {
         if ($this->syncAccess($entity)) {
           $this->drushLog('Processing: @id', ['@id' => $id]);
+          $this->prepareItem($data);
           $this->processItem($entity, $data);
           $success = $this->save($entity, $data);
           switch ($success) {
@@ -672,7 +668,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
           if (!$entity->isNew()) {
             $entity->save();
           }
-          throw new SyncHaltException('Entity could not be loaded or sync access was halted.');
+          throw new SyncSkipException('Entity could not be loaded or sync access was halted.');
         }
       }
       else {
@@ -685,25 +681,46 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         }
       }
     }
-    catch (SyncHaltException $e) {
+    catch (SyncSkipException $e) {
       $this->logger->notice('[Sync Item Skip: %plugin_label] SKIP: %id for %entity_type:%bundle', $context);
       // We need to make sure we have updated this record when skipping.
-      if (!empty($entity->id())) {
+      if ($this->usesCleanup() && !empty($entity->id())) {
         $this->syncStorage->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
       }
       if ($data['_sync_as_batch']) {
         // Send up to runBatch.
-        throw new SyncHaltException($e->getMessage());
+        throw new SyncSkipException($e->getMessage());
+      }
+    }
+    catch (SyncFailException $e) {
+      $this->logger->notice('[Sync Item Fail: %plugin_label] FAIL: %id for %entity_type:%bundle', $context);
+      // We need to make sure we have updated this record when skipping.
+      if ($this->usesCleanup() && !empty($entity->id())) {
+        $this->syncStorage->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
+      }
+      if ($data['_sync_as_batch']) {
+        // Send up to runBatch.
+        throw new SyncFailException($e->getMessage());
       }
     }
     catch (\Exception $e) {
       $context['%error'] = $e->getMessage();
-      $this->logger->error('[Sync Item: %plugin_label] FAIL: %id for %entity_type:%bundle with data %data. Error: %error', $context);
+      $this->logger->error('[Sync Item Fail: %plugin_label] FAIL: %id for %entity_type:%bundle with data %data. Error: %error', $context);
       if ($data['_sync_as_batch']) {
-        throw new \Exception($e->getMessage());
+        throw new SyncFailException($e->getMessage());
       }
     }
   }
+
+  /**
+   * Prepare an item for processing.
+   *
+   * Adding/removing/altering data on a per-item level can be done here.
+   *
+   * @param array $data
+   *   The data provided from the Unionware API for a single item.
+   */
+  protected function prepareItem(array &$data) {}
 
   /**
    * Extending classes should provide the item process method.
@@ -845,6 +862,35 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * {@inheritdoc}
    */
   public function alterData(array &$data) {
+    try {
+      $this->alterItems($data);
+      foreach ($data as &$item) {
+        $this->alterItem($item);
+      }
+    }
+    catch (\Exception $e) {
+      $context = $this->getContext($data) + [
+        '%message' => $e->getMessage(),
+      ];
+      $this->logger->error('[Sync Alter Data: %plugin_label] FAIL: %entity_type:%bundle with data %data. Error: %error', $context);
+    }
+    foreach ($data as &$item) {
+      try {
+        $this->alterItem($item);
+      }
+      catch (\Exception $e) {
+        $context = $this->getContext($data) + [
+          '%message' => $e->getMessage(),
+        ];
+        $this->logger->error('[Sync Alter Data: %plugin_label] FAIL ITEM: %entity_type:%bundle with data %data. Error: %error', $context);
+      }
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function alterItems(array &$data) {
   }
 
   /**
@@ -861,6 +907,11 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $data = $this->getData();
       if (!empty($data) && count($data) > $this->maxDebug) {
         $data = array_slice($data, 0, $this->maxDebug);
+      }
+      if (!empty($data)) {
+        foreach ($data as &$item) {
+          $this->prepareItem($item);
+        }
       }
       if (\Drupal::service('module_handler')->moduleExists('kint')) {
         ksm($data);

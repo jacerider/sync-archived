@@ -5,9 +5,6 @@
  * Drush commands for Sync.
  */
 
-use Drupal\Core\Queue\SuspendQueueException;
-use Drupal\Core\Queue\RequeueException;
-
 /**
  * Implements hook_drush_command().
  */
@@ -46,7 +43,7 @@ function drush_sync($resource_id = NULL) {
     $queue->deleteQueue();
 
     $instance = $manager->createInstance($resource_id);
-    $instance->run();
+    $instance->run(['_sync_as_batch' => TRUE]);
 
     while ($queue->numberOfItems() > 0) {
       $context = [];

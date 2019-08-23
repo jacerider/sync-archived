@@ -19,7 +19,8 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
    *
    * @var string
    */
-  protected $bookmarkKey = '';
+  protected $bookmarkKey = '32;GwAAAAJ7/zgAMgA5AC0AMgA5ADEAQw==9;3678536570;';
+  // protected $bookmarkKey = '';
 
   /**
    * {@inheritdoc}
