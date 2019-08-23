@@ -45,7 +45,7 @@ abstract class SyncFetcherBase extends PluginBase implements SyncFetcherInterfac
       $configuration,
       $plugin_id,
       $plugin_definition,
-      $container->get('logger.factory'),
+      $container->get('logger.factory')
     );
   }
 

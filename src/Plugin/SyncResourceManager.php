@@ -34,6 +34,7 @@ class SyncResourceManager extends DefaultPluginManager {
       'day' => 'mon,tue,wed,thu,fri',
       'no_ui' => FALSE,
       'cleanup' => FALSE,
+      'reset' => FALSE,
       'weight' => 0,
     ];
   }
@@ -265,7 +266,9 @@ class SyncResourceManager extends DefaultPluginManager {
   public static function resetLastRun(array $definition) {
     $state = \Drupal::state();
     $key = self::getStateKey($definition);
-    return $state->delete($key) && $state->delete($key . '.end');
+    $state->delete($key);
+    $state->delete($key . '.end');
+    return TRUE;
   }
 
   /**

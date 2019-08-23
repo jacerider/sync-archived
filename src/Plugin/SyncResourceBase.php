@@ -290,6 +290,14 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * {@inheritdoc}
    */
+  public function usesReset() {
+    $definition = $this->getPluginDefinition();
+    return $definition['reset'] == TRUE;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function run(array $additional = []) {
     $this->logger->notice('[Sync Queue: %plugin_label] START: %entity_type.', $this->getContext());
     $this->setStartTime();
@@ -397,6 +405,21 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $data = $this->filter($data);
     }
     return $data;
+  }
+
+  /**
+   * Process all incoming data.
+   *
+   * Be careful as if the fetcher turns a large number of results this can
+   * time out.
+   */
+  public function getProcessedData($additional = []) {
+    $data = $this->getData();
+    $results = [];
+    foreach ($data as $item) {
+      $results[] = $this->process($item + $additional);
+    }
+    return $results;
   }
 
   /**
@@ -522,6 +545,13 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       ->resetProcessCount('fail');
     $this->logger->notice('[Sync Queue: %plugin_label] FINISH: %entity_type.', $this->getContext());
     \Drupal::service('plugin.manager.sync_resource')->setLastRunEnd($this->pluginDefinition);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function resetLastRun() {
+    \Drupal::service('plugin.manager.sync_resource')->resetLastRun($this->pluginDefinition);
   }
 
   /**
@@ -662,6 +692,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
               $this->logger->notice('[Sync Item: %plugin_label] SUCCESS: %id for %entity_type:%bundle', $context);
               break;
           }
+          return $entity;
         }
         else {
           // We save the entity to make sure it is not queued for cleanup.
@@ -730,7 +761,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * @param array $data
    *   The data provided from the Unionware API for a single item.
    */
-  abstract protected function processItem(EntityInterface $entity, array $data);
+  protected function processItem(EntityInterface $entity, array $data) {}
 
   /**
    * Save the entity and store record in sync table.
@@ -896,7 +927,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * {@inheritdoc}
    */
-  public function alterItem(array &$data) {
+  public function alterItem(&$data) {
   }
 
   /**
@@ -1041,9 +1072,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     if ($entity->hasField($field_name)) {
       $field = $entity->get($field_name);
       $referenced_entities = $field->referencedEntities();
-      // Remove extra entities in case the files have decreased.
-      $remove = array_diff_key($referenced_entities, $files);
-      foreach ($remove as $delta => $media) {
+      foreach ($referenced_entities as $delta => $media) {
         if ($media->hasField($media_field_name)) {
           $media_field = $media->get($media_field_name);
           // If media already has a file set, we need to delete it.
@@ -1053,43 +1082,55 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         }
         $media->delete();
       }
-      foreach ($files as $delta => $file) {
-        if (isset($referenced_entities[$delta])) {
-          $media = $referenced_entities[$delta];
-        }
-        else {
-          $media = $this->entityTypeManager->getStorage('media')->create([
-            'bundle' => $media_type,
-            'uid' => 1,
-            'status' => 1,
-          ]);
-        }
-        foreach ($media_properties as $name => $value) {
-          $media->set($name, $value);
-        }
-        if ($media->hasField($media_field_name)) {
-          $media_field = $media->get($media_field_name);
-          // If media already has a file set, we need to delete it.
-          if (!$media_field->isEmpty() && $media_field->entity) {
-            $media_field->entity->delete();
-          }
-          // If we have a file we want to assign it to the media.
-          if ($file) {
-            $media_field->setValue([
-              'target_id' => $file->id(),
-            ] + $media_field_properties);
-            $media->save();
-            $values[$delta] = [
-              'target_id' => $media->id(),
-            ];
-          }
-          elseif (!$media->isNew()) {
-            // We do not have an updated file and we want to delete it.
-            $media->delete();
-          }
-        }
+      // // Remove extra entities in case the files have decreased.
+      // $remove = array_diff_key($referenced_entities, $files);
+      // foreach ($remove as $delta => $media) {
+      //   if ($media->hasField($media_field_name)) {
+      //     $media_field = $media->get($media_field_name);
+      //     // If media already has a file set, we need to delete it.
+      //     if (!$media_field->isEmpty() && $media_field->entity) {
+      //       $media_field->entity->delete();
+      //     }
+      //   }
+      //   $media->delete();
+      // }
+      // foreach ($files as $delta => $file) {
+      //   if (isset($referenced_entities[$delta])) {
+      //     $media = $referenced_entities[$delta];
+      //   }
+      //   else {
+      //     $media = $this->entityTypeManager->getStorage('media')->create([
+      //       'bundle' => $media_type,
+      //       'uid' => 1,
+      //       'status' => 1,
+      //     ]);
+      //   }
+      //   foreach ($media_properties as $name => $value) {
+      //     $media->set($name, $value);
+      //   }
+      //   if ($media->hasField($media_field_name)) {
+      //     $media_field = $media->get($media_field_name);
+      //     // If media already has a file set, we need to delete it.
+      //     if (!$media_field->isEmpty() && $media_field->entity) {
+      //       $media_field->entity->delete();
+      //     }
+      //     // If we have a file we want to assign it to the media.
+      //     if ($file) {
+      //       $media_field->setValue([
+      //         'target_id' => $file->id(),
+      //       ] + $media_field_properties);
+      //       $media->save();
+      //       $values[$delta] = [
+      //         'target_id' => $media->id(),
+      //       ];
+      //     }
+      //     elseif (!$media->isNew()) {
+      //       // We do not have an updated file and we want to delete it.
+      //       $media->delete();
+      //     }
+      //   }
 
-      }
+      // }
     }
     return $values;
   }

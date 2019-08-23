@@ -3,7 +3,6 @@
 namespace Drupal\sync\Plugin\SyncParser;
 
 use Drupal\sync\Plugin\SyncParserBase;
-use GuzzleHttp\Psr7\Stream;
 
 /**
  * Plugin implementation of the 'file' sync parser.
@@ -16,17 +15,10 @@ use GuzzleHttp\Psr7\Stream;
 class File extends SyncParserBase {
 
   /**
-   * Constructs a SyncFetcher object.
-   *
-   * @param array $configuration
-   *   A configuration array containing information about the plugin instance.
-   * @param string $plugin_id
-   *   The plugin_id for the plugin instance.
-   * @param mixed $plugin_definition
-   *   The plugin implementation definition.
+   * Provides default settings.
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition) {
-    $configuration += [
+  protected function defaultSettings() {
+    return [
       'destination' => 'public://import',
       'filename' => 'file.txt',
       'replace' => FALSE,
@@ -35,7 +27,6 @@ class File extends SyncParserBase {
       'filename_prefix' => '',
       'base64_decode' => TRUE,
     ];
-    parent::__construct($configuration, $plugin_id, $plugin_definition);
   }
 
   /**

@@ -73,7 +73,7 @@ class SyncForm extends FormBase {
         'times' => $this->t('Times'),
         'next' => $this->t('Next Cron Run'),
         'last' => $this->t('Last Run'),
-        'actions' => $this->t('Sync Data'),
+        'actions' => $this->t('Actions'),
       ],
     ];
     foreach ($definitions as $definition) {
@@ -124,8 +124,8 @@ class SyncForm extends FormBase {
         '%start' => $last_run_start ? $date_formatter->format($last_run_start) : '-',
         '%end' => $last_run_end ? $date_formatter->format($last_run_end) : '-',
       ]);
+      $row['actions'] = ['#type' => 'actions', '#attributes' => ['style' => 'white-space: nowrap;']];
       if ($enabled) {
-        $row['actions'] = ['#type' => 'actions', '#attributes' => ['style' => 'white-space: nowrap;']];
         $row['actions']['run'] = [
           '#type' => 'submit',
           '#name' => 'action_' . $definition['id'],
@@ -139,7 +139,16 @@ class SyncForm extends FormBase {
         $row['next']['#markup'] = '<small>' . $this->t('Never') . '</small>';
         $row['run']['#markup'] = '<small>' . $this->t('Disabled') . '</small>';
       }
-      if (\Drupal::currentUser()->hasPermission('debug sf')) {
+      if (!empty($definition['reset']) && \Drupal::currentUser()->hasPermission('sync reset')) {
+        $row['actions']['reset'] = [
+          '#type' => 'submit',
+          '#name' => 'reset_' . $definition['id'],
+          '#value' => (string) $this->t('Reset', ['@label' => $definition['label']]),
+          '#plugin_id' => $definition['id'],
+          '#submit' => ['::reset'],
+        ];
+      }
+      if (\Drupal::currentUser()->hasPermission('sync debug')) {
         $form['table']['#header']['devel'] = $this->t('Debug');
         $row['devel'] = [
           '#type' => 'submit',
@@ -167,6 +176,15 @@ class SyncForm extends FormBase {
     $trigger = $form_state->getTriggeringElement();
     $plugin_id = $trigger['#plugin_id'];
     $this->syncResourceManager->createInstance($plugin_id)->runAsBatch();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function reset(array &$form, FormStateInterface $form_state) {
+    $trigger = $form_state->getTriggeringElement();
+    $plugin_id = $trigger['#plugin_id'];
+    $this->syncResourceManager->createInstance($plugin_id)->resetLastRun();
   }
 
   /**
