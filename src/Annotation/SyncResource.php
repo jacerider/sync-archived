@@ -52,6 +52,13 @@ class SyncResource extends Plugin {
   public $cleanup = FALSE;
 
   /**
+   * A boolean indicating if plugin last run time can be reset via UI.
+   *
+   * @var bool
+   */
+  public $reset = FALSE;
+
+  /**
    * A boolean indicating the weight of this plugin.
    *
    * @var int

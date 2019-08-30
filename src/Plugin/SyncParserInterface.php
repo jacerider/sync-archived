@@ -9,7 +9,32 @@ use Drupal\Component\Plugin\PluginInspectionInterface;
  */
 interface SyncParserInterface extends PluginInspectionInterface {
 
+  /**
+   * Get a setting.
+   *
+   * @param string $key
+   *   The setting key.
+   */
+  public function getSetting($key);
 
-  // Add get/set methods for your plugin type here.
+  /**
+   * Set a setting.
+   *
+   * @param string $key
+   *   The setting key.
+   * @param string $value
+   *   The setting value.
+   *
+   * @return $this
+   */
+  public function setSetting($key, $value);
+
+  /**
+   * Parse the data.
+   *
+   * @param mixed $data
+   *   The data to parse.
+   */
+  public function parse($data);
 
 }

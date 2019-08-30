@@ -2,6 +2,7 @@
 
 namespace Drupal\sync\Plugin\SyncFetcher;
 
+use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Drupal\sync\Plugin\SyncFetcherBase;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -33,11 +34,13 @@ class Http extends SyncFetcherBase implements ContainerFactoryPluginInterface {
    *   The plugin_id for the plugin instance.
    * @param mixed $plugin_definition
    *   The plugin implementation definition.
+   * @param \Drupal\Core\Logger\LoggerChannelFactoryInterface $logger
+   *   The logger channel factory.
    * @param \GuzzleHttp\ClientInterface $http_client
    *   The Guzzle HTTP client.
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, ClientInterface $http_client) {
-    parent::__construct($configuration, $plugin_id, $plugin_definition);
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, LoggerChannelFactoryInterface $logger, ClientInterface $http_client) {
+    parent::__construct($configuration, $plugin_id, $plugin_definition, $logger);
     $this->httpClient = $http_client;
   }
 
@@ -60,6 +63,7 @@ class Http extends SyncFetcherBase implements ContainerFactoryPluginInterface {
       $configuration,
       $plugin_id,
       $plugin_definition,
+      $container->get('logger.factory'),
       $container->get('http_client')
     );
   }
@@ -76,6 +80,13 @@ class Http extends SyncFetcherBase implements ContainerFactoryPluginInterface {
    */
   public function setQuery($query) {
     $this->configuration['query'] = $query;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getQueryParameter($key) {
+    return isset($this->configuration['query'][$key]) ? $this->configuration['query'][$key] : NULL;
   }
 
   /**
