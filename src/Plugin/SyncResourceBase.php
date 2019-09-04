@@ -212,7 +212,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    */
   public function getBundle(array $data) {
     $definition = $this->getPluginDefinition();
-    return $definition['bundle'];
+    return !empty($definition['bundle']) ? $definition['bundle'] : $this->getEntityType();
   }
 
   /**
@@ -669,16 +669,19 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    */
   public function process(array $data) {
     $context = $this->getContext($data);
-    $id = $this->id($data);
-    $context['%id'] = $id;
-    $entity = $this->loadEntity($data);
     try {
+      $this->prepareItem($data);
+      // Redo context as things may have changed in prepareItem.
+      $context = $this->getContext($data);
+      $id = $this->id($data);
+      $context['%id'] = $id;
+      $entity = $this->loadEntity($data);
       if ($entity instanceof EntityInterface) {
         if ($this->syncAccess($entity)) {
-          $this->drushLog('Processing: @id', ['@id' => $id]);
-          $this->prepareItem($data);
           $this->processItem($entity, $data);
           $success = $this->save($entity, $data);
+          $context['%entity_id'] = $entity->id();
+          $this->drushLog('Processing: %id [%entity_type:%bundle:%entity_id]', $context);
           switch ($success) {
             case SAVED_NEW:
               $this->logger->notice('[Sync Item: %plugin_label] NEW: %id for %entity_type:%bundle', $context);
@@ -713,7 +716,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
     }
     catch (SyncSkipException $e) {
-      $this->logger->notice('[Sync Item Skip: %plugin_label] SKIP: %id for %entity_type:%bundle', $context);
+      $context['%error'] = $e->getMessage();
+      $this->drushLog('Skip: %id [%entity_type:%bundle] %error', $context, 'warning');
+      $this->logger->notice('[Sync Item Skip: %plugin_label] SKIP: %id for %entity_type:%bundle. Error: %error', $context);
       // We need to make sure we have updated this record when skipping.
       if ($this->usesCleanup() && !empty($entity->id())) {
         $this->syncStorage->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
@@ -724,7 +729,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
     }
     catch (SyncFailException $e) {
-      $this->logger->notice('[Sync Item Fail: %plugin_label] FAIL: %id for %entity_type:%bundle', $context);
+      $context['%error'] = $e->getMessage();
+      $this->drushLog('Fail: %id [%entity_type:%bundle] %error', $context, 'error');
+      $this->logger->notice('[Sync Item Fail: %plugin_label] FAIL: %id for %entity_type:%bundle. Error: %error', $context);
       // We need to make sure we have updated this record when skipping.
       if ($this->usesCleanup() && !empty($entity->id())) {
         $this->syncStorage->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
@@ -736,6 +743,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     }
     catch (\Exception $e) {
       $context['%error'] = $e->getMessage();
+      $this->drushLog('Fail: %id [%entity_type:%bundle] %error', $context, 'error');
       $this->logger->error('[Sync Item Fail: %plugin_label] FAIL: %id for %entity_type:%bundle with data %data. Error: %error', $context);
       if ($data['_sync_as_batch']) {
         throw new SyncFailException($e->getMessage());
@@ -934,26 +942,21 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * {@inheritdoc}
    */
   public function debug() {
-    try {
-      $data = $this->getData();
-      if (!empty($data) && count($data) > $this->maxDebug) {
-        $data = array_slice($data, 0, $this->maxDebug);
-      }
-      if (!empty($data)) {
-        foreach ($data as &$item) {
-          $this->prepareItem($item);
-        }
-      }
-      if (\Drupal::service('module_handler')->moduleExists('kint')) {
-        ksm($data);
-      }
-      else {
-        print '<pre>' . print_r($data, FALSE) . '</pre>';
-        die;
+    $data = $this->getData();
+    if (!empty($data) && count($data) > $this->maxDebug) {
+      $data = array_slice($data, 0, $this->maxDebug);
+    }
+    if (!empty($data)) {
+      foreach ($data as &$item) {
+        $this->prepareItem($item);
       }
     }
-    catch (SyncFetcherPagingException $e) {
-      // Do nothing.
+    if (\Drupal::service('module_handler')->moduleExists('kint')) {
+      ksm($data);
+    }
+    else {
+      print '<pre>' . print_r($data, FALSE) . '</pre>';
+      die;
     }
   }
 
@@ -965,12 +968,12 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       '%plugin_id' => $this->getPluginId(),
       '%plugin_label' => $this->label(),
       '%entity_type' => $this->getEntityType(),
+      '%id' => 'na',
+      '%bundle' => 'na',
     ];
     if (!empty($data)) {
-      $context['%bundle'] = $this->getBundle($data);
-    }
-    if (!empty($data)) {
       $context += [
+        '%bundle' => $this->getBundle($data),
         '%data' => print_r($data, TRUE),
       ];
     }
