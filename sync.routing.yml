@@ -5,3 +5,14 @@ sync.sync:
     _title: 'Sync'
   requirements:
     _permission: 'access sync overview'
+  options:
+    _admin_route: TRUE
+sync.settings:
+  path: '/admin/sync/settings'
+  defaults:
+    _form: '\Drupal\sync\Form\SettingsForm'
+    _title: 'Sync Settings'
+  requirements:
+    _permission: 'manage sync'
+  options:
+    _admin_route: TRUE

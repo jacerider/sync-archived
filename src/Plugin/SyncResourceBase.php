@@ -15,6 +15,7 @@ use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\sync\SyncStorageInterface;
 use Drupal\Core\State\StateInterface;
+use Psr\Log\LogLevel;
 
 /**
  * Base class for Sync Resource plugins.
@@ -108,9 +109,16 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * If run should 'run' event when data is empty.
    *
-   * @var int
+   * @var bool
    */
   protected $runOnEmpty = FALSE;
+
+  /**
+   * If verbose debugging should happen.
+   *
+   * @var bool
+   */
+  protected $verboseLog;
 
   /**
    * The maximum number of items to show when debugging.
@@ -299,7 +307,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * {@inheritdoc}
    */
   public function run(array $additional = []) {
-    $this->logger->notice('[Sync Queue: %plugin_label] START: %entity_type.', $this->getContext());
+    $this->log(LogLevel::NOTICE, '[Sync Start: %plugin_label]', $this->getContext());
     $this->setStartTime();
     $this->fetchData($additional);
   }
@@ -379,7 +387,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
     }
     catch (\Exception $e) {
-      $this->logger->error('[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
+      $this->log(LogLevel::ERROR, '[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
         '@message' => $e->getMessage(),
       ]);
       if (!empty($additional['_sync_as_batch'])) {
@@ -397,7 +405,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    *   An array of data.
    */
   public function getData() {
-    $this->logger->notice('[Sync Data: %plugin_label] LOAD DATA: %entity_type.', $this->getContext());
+    $this->log(LogLevel::INFO, '[Sync Data: %plugin_label] LOAD DATA: %entity_type.', $this->getContext());
     $data = $this->getFetcher()->fetch();
     if (!empty($data)) {
       $data = $this->getParser()->parse($data);
@@ -497,13 +505,13 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       ];
       if (!empty($new_data_before_filtering)) {
         // We may have more data to fetch, so run again.
-        $this->logger->notice('[Sync Fetch: %plugin_label] PAGE %page: %entity_type with %new_data_count records added for processing.', $context);
+        $this->log(LogLevel::INFO, '[Sync Fetch: %plugin_label] PAGE %page: %entity_type with %new_data_count records added for processing.', $context);
         $this->queueProcess($new_data, $additional);
         $this->queueFetchPage($new_data, $additional);
       }
       else {
         // We have all the data we can get.
-        $this->logger->notice('[Sync Fetch: %plugin_label] PAGE FINISH: %entity_type.', $context);
+        $this->log(LogLevel::INFO, '[Sync Fetch: %plugin_label] PAGE FINISH: %entity_type.', $context);
         $this->resetPageCount();
         $this->queueEnd($additional);
       }
@@ -512,7 +520,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
     }
     catch (\Exception $e) {
-      $this->logger->error('[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
+      $this->log(LogLevel::ERROR, '[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
         '@message' => $e->getMessage(),
       ]);
       drupal_set_message($e->getMessage(), 'error');
@@ -534,16 +542,17 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * {@inheritdoc}
    */
   public function end(array $data) {
-    drupal_set_message(t('The data import has completed. %success items were successful, %skip items were skipped, and %fail items failed.', [
+    $context = $this->getContext() + [
       '%success' => $this->getProcessCount('success'),
       '%skip' => $this->getProcessCount('skip'),
       '%fail' => $this->getProcessCount('fail'),
-    ]));
+    ];
+    drupal_set_message(t('The data import has completed. %success items were successful, %skip items were skipped, and %fail items failed.', $context));
     $this->resetPageCount()
       ->resetProcessCount('success')
       ->resetProcessCount('skip')
       ->resetProcessCount('fail');
-    $this->logger->notice('[Sync Queue: %plugin_label] FINISH: %entity_type.', $this->getContext());
+    $this->log(LogLevel::NOTICE, '[Sync Finish: %plugin_label] Success: %success, Skip: %skip, Fail: %fail', $context);
     \Drupal::service('plugin.manager.sync_resource')->setLastRunEnd($this->pluginDefinition);
   }
 
@@ -684,15 +693,15 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
           $this->drushLog('Processing: %id [%entity_type:%bundle:%entity_id]', $context);
           switch ($success) {
             case SAVED_NEW:
-              $this->logger->notice('[Sync Item: %plugin_label] NEW: %id for %entity_type:%bundle', $context);
+              $this->log(LogLevel::INFO, '[Sync Item: %plugin_label] NEW: %id for %entity_type:%bundle', $context);
               break;
 
             case SAVED_UPDATED:
-              $this->logger->notice('[Sync Item: %plugin_label] UPDATED: %id for %entity_type:%bundle', $context);
+              $this->log(LogLevel::INFO, '[Sync Item: %plugin_label] UPDATED: %id for %entity_type:%bundle', $context);
               break;
 
             default:
-              $this->logger->notice('[Sync Item: %plugin_label] SUCCESS: %id for %entity_type:%bundle', $context);
+              $this->log(LogLevel::INFO, '[Sync Item: %plugin_label] SUCCESS: %id for %entity_type:%bundle', $context);
               break;
           }
           return $entity;
@@ -718,7 +727,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     catch (SyncSkipException $e) {
       $context['%error'] = $e->getMessage();
       $this->drushLog('Skip: %id [%entity_type:%bundle] %error', $context, 'warning');
-      $this->logger->notice('[Sync Item Skip: %plugin_label] SKIP: %id for %entity_type:%bundle. Error: %error', $context);
+      $this->log(LogLevel::INFO, '[Sync Item Skip: %plugin_label] SKIP: %id for %entity_type:%bundle. Error: %error', $context);
       // We need to make sure we have updated this record when skipping.
       if ($this->usesCleanup() && !empty($entity->id())) {
         $this->syncStorage->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
@@ -731,7 +740,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     catch (SyncFailException $e) {
       $context['%error'] = $e->getMessage();
       $this->drushLog('Fail: %id [%entity_type:%bundle] %error', $context, 'error');
-      $this->logger->notice('[Sync Item Fail: %plugin_label] FAIL: %id for %entity_type:%bundle. Error: %error', $context);
+      $this->log(LogLevel::INFO, '[Sync Item Fail: %plugin_label] FAIL: %id for %entity_type:%bundle. Error: %error', $context);
       // We need to make sure we have updated this record when skipping.
       if ($this->usesCleanup() && !empty($entity->id())) {
         $this->syncStorage->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
@@ -744,7 +753,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     catch (\Exception $e) {
       $context['%error'] = $e->getMessage();
       $this->drushLog('Fail: %id [%entity_type:%bundle] %error', $context, 'error');
-      $this->logger->error('[Sync Item Fail: %plugin_label] FAIL: %id for %entity_type:%bundle with data %data. Error: %error', $context);
+      $this->log(LogLevel::ERROR, '[Sync Item Fail: %plugin_label] FAIL: %id for %entity_type:%bundle with data %data. Error: %error', $context);
       if ($data['_sync_as_batch']) {
         throw new SyncFailException($e->getMessage());
       }
@@ -799,7 +808,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   public function queueCleanup(array $data) {
     $context = $this->getContext($data);
     try {
-      $this->logger->notice('[Sync Cleanup: %plugin_label] CLEANUP: %entity_type.', $context);
+      $this->log(LogLevel::INFO, '[Sync Cleanup: %plugin_label] CLEANUP: %entity_type.', $context);
       $query = $this->syncStorage->getDataQuery($this->getGroup($data));
       $this->cleanupQueryAlter($query, $data);
       $results = $query->execute()->fetchAllAssoc('id');
@@ -821,7 +830,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     }
     catch (\Exception $e) {
       $context['%error'] = $e->getMessage();
-      $this->logger->error('[Sync Cleanup: %plugin_label] FAIL: %entity_type:%bundle with data %data. Error: %error', $context);
+      $this->log(LogLevel::ERROR, '[Sync Cleanup: %plugin_label] FAIL: %entity_type:%bundle with data %data. Error: %error', $context);
       if ($data['_sync_as_batch']) {
         throw new \Exception($e->getMessage());
       }
@@ -859,7 +868,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
     }
     catch (SfHaltException $e) {
-      $this->logger->notice('[Sync Clean Skip: %plugin_label] SKIP: %id for %entity_type:%bundle', $context);
+      $this->log(LogLevel::INFO, '[Sync Clean Skip: %plugin_label] SKIP: %id for %entity_type:%bundle', $context);
       if ($data['_sync_as_batch']) {
         // Send up to runBatch.
         throw new SfHaltException($e->getMessage());
@@ -867,7 +876,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     }
     catch (\Exception $e) {
       $context['%error'] = $e->getMessage();
-      $this->logger->error('[Sync Clean: %plugin_label] FAIL: %id for %entity_type:%bundle with data %data. Error: %error', $context);
+      $this->log(LogLevel::ERROR, '[Sync Clean: %plugin_label] FAIL: %id for %entity_type:%bundle with data %data. Error: %error', $context);
       if ($data['_sync_as_batch']) {
         throw new \Exception($e->getMessage());
       }
@@ -881,7 +890,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $status = $entity->delete();
     if ($status) {
       // Entity cleanup is handled in hook_entity_delete().
-      $this->logger->notice('[Sync Clean: %plugin_label] DELETE: %entity_id for %entity_type:%bundle', $context);
+      $this->log(LogLevel::INFO, '[Sync Clean: %plugin_label] DELETE: %entity_id for %entity_type:%bundle', $context);
     }
   }
 
@@ -911,7 +920,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $context = $this->getContext($data) + [
         '%message' => $e->getMessage(),
       ];
-      $this->logger->error('[Sync Alter Data: %plugin_label] FAIL: %entity_type:%bundle with data %data. Error: %error', $context);
+      $this->log(LogLevel::ERROR, '[Sync Alter Data: %plugin_label] FAIL: %entity_type:%bundle with data %data. Error: %error', $context);
     }
     foreach ($data as &$item) {
       try {
@@ -921,7 +930,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         $context = $this->getContext($data) + [
           '%message' => $e->getMessage(),
         ];
-        $this->logger->error('[Sync Alter Data: %plugin_label] FAIL ITEM: %entity_type:%bundle with data %data. Error: %error', $context);
+        $this->log(LogLevel::ERROR, '[Sync Alter Data: %plugin_label] FAIL ITEM: %entity_type:%bundle with data %data. Error: %error', $context);
       }
     }
   }
@@ -958,6 +967,38 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       print '<pre>' . print_r($data, FALSE) . '</pre>';
       die;
     }
+  }
+
+  /**
+   * Log event.
+   *
+   * Runtime errors that do not require immediate action but should typically
+   * be logged and monitored.
+   *
+   * @param mixed $level
+   *   The log level.
+   * @param string $message
+   *   The log message.
+   * @param array $context
+   *   The log context.
+   */
+  protected function log($level, $message, array $context = []) {
+    if ($level !== LogLevel::INFO || $this->verboseLog()) {
+      $this->logger->log($level, $message, $context);
+    }
+  }
+
+  /**
+   * Should verbose logging be used.
+   *
+   * @return bool
+   *   TRUE if verbose logging should be used.
+   */
+  protected function verboseLog() {
+    if (!isset($this->verboseLog)) {
+      $this->verboseLog = \Drupal::config('devel.settings')->get('log_verbose');
+    }
+    return $this->verboseLog;
   }
 
   /**

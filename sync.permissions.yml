@@ -1,6 +1,9 @@
 'access sync overview':
   title: 'Access sync overview page'
   description: 'Get an overview of all sync resources.'
+'manage sync':
+  title: 'Manage sync'
+  restrict access: true
 'sync reset':
   title: 'Allow sync reset'
 'sync debug':

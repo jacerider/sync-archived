@@ -137,7 +137,7 @@ class SyncForm extends FormBase {
       }
       else {
         $row['next']['#markup'] = '<small>' . $this->t('Never') . '</small>';
-        $row['run']['#markup'] = '<small>' . $this->t('Disabled') . '</small>';
+        $row['actions']['run']['#markup'] = '<small>' . $this->t('Disabled') . '</small>';
       }
       if (!empty($definition['reset']) && \Drupal::currentUser()->hasPermission('sync reset')) {
         $row['actions']['reset'] = [
