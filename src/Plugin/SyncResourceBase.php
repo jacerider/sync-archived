@@ -179,7 +179,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $container->get('entity_type.manager'),
       $container->get('state'),
       $container->get('logger.factory'),
-      $container->get('queue')->get('sync'),
+      $container->get('queue')->get('sync_' . $plugin_id),
       $container->get('plugin.manager.sync_client'),
       $container->get('plugin.manager.sync_fetcher'),
       $container->get('plugin.manager.sync_parser'),
@@ -307,6 +307,8 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * {@inheritdoc}
    */
   public function run(array $additional = []) {
+    // Reset queue.
+    $this->queue->deleteQueue();
     $this->log(LogLevel::NOTICE, '[Sync Start: %plugin_label]', $this->getContext());
     $this->setStartTime();
     $this->fetchData($additional);
@@ -667,7 +669,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $entity = FALSE;
     $entity_type = $this->getEntityType();
     $bundle = $this->getBundle($data);
-    if ($entity_type) {
+    if ($entity_type && $bundle) {
       $entity = $this->syncEntityProvider->getOrNew($this->id($data), $entity_type, $bundle, [], $this->getGroup($data));
     }
     return $entity;
@@ -957,7 +959,18 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     }
     if (!empty($data)) {
       foreach ($data as &$item) {
-        $this->prepareItem($item);
+        try {
+          $this->prepareItem($item);
+        }
+        catch (SyncSkipException $e) {
+          drupal_set_message($e->getMessage(), 'warning');
+        }
+        catch (SyncFailException $e) {
+          drupal_set_message($e->getMessage(), 'warning');
+        }
+        catch (\Exception $e) {
+          drupal_set_message($e->getMessage(), 'error');
+        }
       }
     }
     if (\Drupal::service('module_handler')->moduleExists('kint')) {
@@ -1013,10 +1026,10 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       '%bundle' => 'na',
     ];
     if (!empty($data)) {
-      $context += [
+      $context = [
         '%bundle' => $this->getBundle($data),
         '%data' => print_r($data, TRUE),
-      ];
+      ] + $context;
     }
     return $context;
   }
@@ -1024,9 +1037,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * Get the temp storage service.
    */
-  protected function getTempStore() {
-    return \Drupal::service('user.shared_tempstore')->get('sync');
-  }
+  // protected function getTempStore() {
+  //   return \Drupal::service('user.shared_tempstore')->get('sync');
+  // }
 
   /**
    * Get the state key.
