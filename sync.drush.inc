@@ -11,14 +11,19 @@
 function sync_drush_command() {
   $items = [];
 
-  $index['resource_id'] = dt('The machine name of an sync resource.');
-
   $items['sync'] = [
     'description' => 'Run sync by resource id.',
     'examples' => [
       'drush sync node_index' => dt('Sync the resource with the ID @name.', ['@name' => 'node_index']),
     ],
-    'arguments' => $index,
+    'arguments' => [
+      'resource_id' => dt('The machine name of an sync resource.'),
+    ],
+    'options' => [
+      'continue' => [
+        'description' => 'Continue a sync.',
+      ],
+    ],
     'aliases' => ['sync'],
   ];
 
@@ -35,15 +40,29 @@ function drush_sync($resource_id = NULL) {
     return;
   }
 
+  $continue = drush_get_option('continue', FALSE);
   $manager = \Drupal::service('plugin.manager.sync_resource');
   if ($manager->hasDefinition($resource_id)) {
-    $queue_name = 'sync';
+    $queue_name = 'sync_' . $resource_id;
     $queue_factory = \Drupal::service('queue');
     $queue = $queue_factory->get($queue_name);
-    $queue->deleteQueue();
-
     $instance = $manager->createInstance($resource_id);
-    $instance->run(['_sync_as_batch' => TRUE]);
+
+    if ($continue) {
+      // Release all jobs.
+      $database = \Drupal::database();
+      $database->update('queue')
+        ->fields([
+          'expire' => 0,
+        ])
+        ->condition('name', $queue_name)
+        ->condition('expire', 0, '<>')
+        ->execute();
+    }
+    else {
+      $queue->deleteQueue();
+      $instance->run(['_sync_as_batch' => TRUE]);
+    }
 
     while ($queue->numberOfItems() > 0) {
       $context = [];
