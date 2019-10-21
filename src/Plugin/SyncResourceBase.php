@@ -284,6 +284,8 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    *
    * @param array $context
    *   Additional context that can be passed to the build.
+   *
+   * @return $this
    */
   public function build(array $context = []) {
     $context += $this->getContext();
@@ -291,6 +293,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $this->queue->deleteQueue();
     $this->setStartTime();
     $this->buildJobs($context);
+    return $this;
   }
 
   /**
@@ -551,11 +554,11 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $context['%id'] = $id;
       $entity = $this->loadEntity($item);
       if ($entity) {
-        $context['%bundle'] = $entity->getEntityTypeId();
-        $context['%entity_id'] = $entity->id();
         if ($this->accessEntity($entity)) {
           $this->processItem($entity, $item);
           $success = $this->saveItem($entity, $item);
+          $context['%bundle'] = $entity->getEntityTypeId();
+          $context['%entity_id'] = $entity->id();
           switch ($success) {
             case SAVED_NEW:
               $this->log(LogLevel::INFO, '%plugin_label: NEW: %id -> %entity_type:%entity_id', $context);
@@ -613,15 +616,13 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     try {
       $this->incrementPageCount();
       $page = $this->getPageCount();
-      $context = $data['context'] + [
-        '%page' => $page,
-      ];
-      $this->log(LogLevel::INFO, '%plugin_label: Fetching [Page: @page | Success: @success | Skipped: @skip | Failed: @fail]', [
+      $context = [
         '@page' => $page,
         '@success' => $this->getProcessCount('success'),
         '@skip' => $this->getProcessCount('skip'),
         '@fail' => $this->getProcessCount('fail'),
-      ]);
+      ] + $data['context'];
+      $this->log(LogLevel::INFO, '%plugin_label: Fetching [Page: @page | Success: @success | Skipped: @skip | Failed: @fail]', $context);
       $data = $this->fetchData($data['items']);
       if ($data->hasItems()) {
         $this->queueData($data, $context);
