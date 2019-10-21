@@ -27,16 +27,37 @@ class SyncResourceManager extends DefaultPluginManager {
     $this->alterInfo('sync_sync_resource_info');
     $this->setCacheBackend($cache_backend, 'sync_sync_resource_plugins');
     $this->defaults = [
+      // If status is 0, resource will not show or be run.
       'status' => 1,
+      // If computed is 1, resource will show but cannot be manually run.
+      'computed' => 0,
+      // If no_ui is 1, resource will be treated as active but will not show.
+      'no_ui' => 0,
       'entity_type' => '',
       'bundle' => '',
       'cron' => '00:00',
       'day' => 'mon,tue,wed,thu,fri',
-      'no_ui' => FALSE,
-      'cleanup' => FALSE,
-      'reset' => FALSE,
+      'cleanup' => 0,
+      // Allows resource to be reset. This will reset last run and can be used
+      // for resoruces that track last used to determine which data to run.
+      'reset' => 0,
       'weight' => 0,
     ];
+  }
+
+  /**
+   * Performs extra processing on plugin definitions.
+   *
+   * By default we add defaults for the type to the definition. If a type has
+   * additional processing logic they can do that by replacing or extending the
+   * method.
+   */
+  public function processDefinition(&$definition, $plugin_id) {
+    parent::processDefinition($definition, $plugin_id);
+    if (!empty($definition['computed'])) {
+      // Computed items should never be processed via cron.
+      $definition['cron'] = 0;
+    }
   }
 
   /**
@@ -46,6 +67,15 @@ class SyncResourceManager extends DefaultPluginManager {
     $definitions = parent::getDefinitions();
     uasort($definitions, [get_class($this), 'sort']);
     return $definitions;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getActiveDefinitions() {
+    return array_filter($this->getDefinitions(), function ($definition) {
+      return !empty($definition['status']);
+    });
   }
 
   /**
@@ -62,6 +92,19 @@ class SyncResourceManager extends DefaultPluginManager {
   }
 
   /**
+   * Gets a resource instance.
+   *
+   * @param string $resource_id
+   *   The resource definition id.
+   */
+  public function getResource($resource_id) {
+    if ($this->hasDefinition($resource_id)) {
+      return $this->createInstance($resource_id);
+    }
+    return NULL;
+  }
+
+  /**
    * Get an instance of all plugins that have not been processed by cron.
    *
    * We use the plugin cron property to determine at which time of the day
@@ -73,8 +116,8 @@ class SyncResourceManager extends DefaultPluginManager {
   public function getForCron() {
     $request_time = \Drupal::time()->getCurrentTime();
     $plugins = [];
-    foreach ($this->getDefinitions() as $definition) {
-      if (empty($definition['status']) || empty($definition['cron'])) {
+    foreach ($this->getActiveDefinitions() as $definition) {
+      if (empty($definition['cron'])) {
         continue;
       }
       $cron_time = $this->getNextCronTime($definition);
@@ -279,6 +322,12 @@ class SyncResourceManager extends DefaultPluginManager {
     $status = (int) $b['status'] - (int) $a['status'];
     if ($status !== 0) {
       return $status;
+    }
+
+    // Separate computed.
+    $computed = (int) $a['computed'] - (int) $b['computed'];
+    if ($computed !== 0) {
+      return $computed;
     }
 
     // Separate cron from cronless.

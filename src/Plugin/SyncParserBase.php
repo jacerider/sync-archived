@@ -49,6 +49,13 @@ abstract class SyncParserBase extends PluginBase implements SyncParserInterface 
   /**
    * Parse the data.
    */
-  abstract public function parse($data);
+  public function doParse($data) {
+    return $this->parse($data);
+  }
+
+  /**
+   * Parse the data.
+   */
+  abstract protected function parse($data);
 
 }

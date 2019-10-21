@@ -16,3 +16,13 @@ sync.settings:
     _permission: 'manage sync'
   options:
     _admin_route: TRUE
+sync.log:
+  path: '/admin/sync/{plugin_id}/log'
+  defaults:
+    _controller: '\Drupal\sync\Controller\SyncController::log'
+    _title: 'Sync Log'
+    plugin: null
+  requirements:
+    _permission: 'access sync overview'
+  options:
+    _admin_route: TRUE

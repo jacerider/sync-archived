@@ -21,11 +21,7 @@ trait SyncResourceTrait {
    *   An array of data.
    */
   protected function getResource($resource_id) {
-    $manager = $this->syncResourceManager();
-    if ($manager->hasDefinition($resource_id)) {
-      return $manager->createInstance($resource_id);
-    }
-    return NULL;
+    return $this->syncResourceManager()->getResource($resource_id);
   }
 
   /**

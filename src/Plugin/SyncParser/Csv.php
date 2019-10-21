@@ -17,7 +17,7 @@ class Csv extends SyncParserBase {
   /**
    * {@inheritdoc}
    */
-  public function parse($data) {
+  protected function parse($data) {
     $delimiter = ",";
     $skip_empty_lines = TRUE;
     $trim_fields = TRUE;

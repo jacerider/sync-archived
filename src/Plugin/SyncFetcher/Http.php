@@ -5,6 +5,7 @@ namespace Drupal\sync\Plugin\SyncFetcher;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Drupal\sync\Plugin\SyncFetcherBase;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
+use Drupal\sync\Plugin\SyncDataItems;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use GuzzleHttp\ClientInterface;
 
@@ -108,7 +109,7 @@ class Http extends SyncFetcherBase implements ContainerFactoryPluginInterface {
   /**
    * {@inheritdoc}
    */
-  public function fetch() {
+  protected function fetch($page_number, SyncDataItems $previous_data) {
     $data = $this->httpClient->request('GET', $this->configuration['url'], $this->getOptions())->getBody();
     if ($this->configuration['as_content']) {
       $data = $data->getContents();

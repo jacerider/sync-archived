@@ -72,22 +72,62 @@ abstract class SyncFetcherBase extends PluginBase implements SyncFetcherInterfac
    * Provides default settings.
    */
   protected function defaultSettings() {
-    return [];
+    return [
+      'page_size' => 0,
+      'page_limit' => 0,
+    ];
   }
 
   /**
-   * Called when paging is enabled.
-   *
-   * @return array
-   *   Should return results of paged fetch. If empty array, paging will end.
+   * {@inheritdoc}
    */
-  public function fetchPage($previous_data, $page) {
-    return [];
+  public function getPageSize() {
+    return $this->configuration['page_size'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setPageSize($size) {
+    $this->configuration['page_size'] = $size;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getPageLimit() {
+    return $this->configuration['page_limit'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setPageLimit($limit) {
+    $this->configuration['page_limit'] = $limit;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function doFetch($page_number = 1, SyncDataItems $previous_data = NULL) {
+    if (!$previous_data) {
+      $previous_data = new SyncDataItems();
+    }
+    return $this->fetch($page_number, $previous_data);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function hasNextPage($page_number = 1, SyncDataItems $previous_data = NULL) {
+    return $this->getPageLimit() === 0 || $page_number < $this->getPageLimit();
   }
 
   /**
    * Build the request.
    */
-  abstract public function fetch();
+  abstract protected function fetch($page_number, SyncDataItems $previous_data);
 
 }

@@ -34,7 +34,10 @@ interface SyncParserInterface extends PluginInspectionInterface {
    *
    * @param mixed $data
    *   The data to parse.
+   *
+   * @return array
+   *   The data as an array.
    */
-  public function parse($data);
+  public function doParse($data);
 
 }

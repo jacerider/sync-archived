@@ -2,6 +2,7 @@
 
 namespace Drupal\sync\Plugin\SyncFetcher;
 
+use Drupal\sync\Plugin\SyncDataItems;
 use Drupal\sync\Plugin\SyncFetcherBase;
 
 /**
@@ -25,7 +26,7 @@ class Soap extends SyncFetcherBase {
       'resource_name' => NULL,
       'login' => NULL,
       'password' => NULL,
-    ];
+    ] + parent::defaultSettings();
   }
 
   /**
@@ -129,7 +130,7 @@ class Soap extends SyncFetcherBase {
   /**
    * {@inheritdoc}
    */
-  public function fetch() {
+  protected function fetch($page_number, SyncDataItems $previous_data) {
     $client = new \SoapClient($this->getUrl(), $this->getOptions());
     $data = [];
     if (!empty($this->getResourceName())) {

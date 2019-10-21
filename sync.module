@@ -11,6 +11,8 @@ use Drupal\Core\Entity\EntityFormInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\sync\Plugin\Field\FieldWidget\ReadonlyFieldWidget;
+use Drupal\views\Plugin\views\query\QueryPluginBase;
+use Drupal\views\ViewExecutable;
 
 /**
  * Implements hook_help().
@@ -35,7 +37,7 @@ function sync_cron() {
   $manager = \Drupal::service('plugin.manager.sync_resource');
   foreach ($manager->getForCron() as $instance) {
     /* @var \Drupal\sync\Plugin\SyncResourceInterface $instance */
-    $instance->run();
+    $instance->build();
   }
 }
 
@@ -110,16 +112,26 @@ function sync_form_alter(&$form, FormStateInterface $form_state, $form_id) {
 /**
  * Implements hook_queue_info_alter().
  */
-// function sync_queue_info_alter(&$definitions) {
-//   foreach (\Drupal::service('plugin.manager.sync_resource')->getDefinitions() as $key => $definition) {
-//     $definitions['sync_' . $key] = [
-//       'id' => 'sync_' . $key,
-//       'title' => $definition['label'],
-//       'cron' => [
-//         'time' => 180,
-//       ],
-//       'class' => 'Drupal\sync\Plugin\QueueWorker\Sync',
-//       'provider' => 'sync',
-//     ];
-//   }
-// }
+function sync_queue_info_alter(&$definitions) {
+  foreach (\Drupal::service('plugin.manager.sync_resource')->getDefinitions() as $key => $definition) {
+    $definitions['sync_' . $key] = [
+      'id' => 'sync_' . $key,
+      'title' => $definition['label'],
+      'cron' => [
+        'time' => 180,
+      ],
+      'class' => 'Drupal\sync\Plugin\QueueWorker\Sync',
+      'provider' => 'sync',
+    ];
+  }
+}
+
+/**
+ * Implements hook_views_query_alter().
+ */
+function sync_views_query_alter(ViewExecutable $view, QueryPluginBase $query) {
+  if ($view->id() == 'sync_watchdog' && !empty($view->args[1])) {
+    // Show only logs since start of most recent run.
+    $query->addWhere('', 'watchdog.timestamp', $view->args[1], '>');
+  }
+}

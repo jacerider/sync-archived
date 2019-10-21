@@ -17,7 +17,7 @@ class Stream extends SyncParserBase {
   /**
    * {@inheritdoc}
    */
-  public function parse($data) {
+  protected function parse($data) {
     $data = [['contents' => $data->getContents()]];
     return $data;
   }

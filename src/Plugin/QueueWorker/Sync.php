@@ -74,6 +74,7 @@ class Sync extends QueueWorkerBase implements ContainerFactoryPluginInterface {
     $op = $data['op'];
     if (method_exists($plugin, $op)) {
       $item = $data['data'] ?? [];
+      $item['%sync_as_job'] = TRUE;
       $plugin->{$op}($item);
     }
     else {

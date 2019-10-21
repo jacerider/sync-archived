@@ -8,6 +8,14 @@ namespace Drupal\sync\Plugin;
 interface SyncFetcherPagedInterface extends SyncFetcherInterface {
 
   /**
+   * Get the number of items per page.
+   *
+   * @return int
+   *   The number of items per page.
+   */
+  public function getSize();
+
+  /**
    * Called when paging is enabled.
    *
    * @return array|null

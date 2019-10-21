@@ -17,7 +17,7 @@ class None extends SyncParserBase {
   /**
    * {@inheritdoc}
    */
-  public function parse($data) {
+  protected function parse($data) {
     return $data;
   }
 

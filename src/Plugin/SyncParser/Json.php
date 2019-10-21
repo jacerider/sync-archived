@@ -18,7 +18,7 @@ class Json extends SyncParserBase {
   /**
    * {@inheritdoc}
    */
-  public function parse($data) {
+  protected function parse($data) {
     return json_decode($data, TRUE);
   }
 

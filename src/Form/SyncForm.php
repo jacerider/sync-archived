@@ -7,6 +7,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\sync\Plugin\SyncResourceManager;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\Core\Entity\EntityManagerInterface;
+use Drupal\Core\Url;
 
 /**
  * Class SyncForm.
@@ -31,9 +32,9 @@ class SyncForm extends FormBase {
    * Constructs a new AuthorizeForm object.
    *
    * @param \Drupal\Core\Entity\EntityManagerInterface $entity_manager
-   *   The entity manager.
+   The entity manager.
    * @param \Drupal\sync\Plugin\SyncResourceManager $sync_resource_manager
-   *   The resource manager.
+   The resource manager.
    */
   public function __construct(EntityManagerInterface $entity_manager, SyncResourceManager $sync_resource_manager) {
     $this->entityManager = $entity_manager;
@@ -64,7 +65,7 @@ class SyncForm extends FormBase {
     $request_time = \Drupal::time()->getCurrentTime();
     $date_formatter = \Drupal::service('date.formatter');
 
-    $definitions = $this->syncResourceManager->getDefinitions();
+    $definitions = $this->syncResourceManager->getActiveDefinitions();
     $form['table'] = [
       '#type' => 'table',
       '#header' => [
@@ -74,6 +75,7 @@ class SyncForm extends FormBase {
         'next' => $this->t('Next Cron Run'),
         'last' => $this->t('Last Run'),
         'actions' => $this->t('Actions'),
+        'log' => $this->t('Log'),
       ],
     ];
     foreach ($definitions as $definition) {
@@ -94,7 +96,7 @@ class SyncForm extends FormBase {
           '@bundle' => isset($bundle_definitions[$definition['bundle']]) ? $bundle_definitions[$definition['bundle']]['label'] : 'None Specified',
         ] + $context;
       }
-      $enabled = !empty($definition['status']);
+      $computed = !empty($definition['computed']);
       $row = [];
       $row['label']['#markup'] = $this->t('<strong>@label</strong> <small>(@id)</small><br><small>Entity: @entity<br>Bundle: @bundle</small>', $context);
       $row['clean']['#markup'] = '<small>' . (!empty($definition['cleanup']) ? $this->t('Yes') : $this->t('No')) . '</small>';
@@ -116,7 +118,7 @@ class SyncForm extends FormBase {
         $row['next']['#markup'] = '<small>Next Run</small>';
       }
       else {
-        $row['next']['#markup'] = '<small>' . ($enabled ? $date_formatter->format($next) : '-') . '</small>';
+        $row['next']['#markup'] = '<small>' . (!$computed ? $date_formatter->format($next) : '-') . '</small>';
       }
       $last_run_start = $this->syncResourceManager->getLastRunStart($definition);
       $last_run_end = $this->syncResourceManager->getLastRunEnd($definition);
@@ -125,19 +127,16 @@ class SyncForm extends FormBase {
         '%end' => $last_run_end ? $date_formatter->format($last_run_end) : '-',
       ]);
       $row['actions'] = ['#type' => 'actions', '#attributes' => ['style' => 'white-space: nowrap;']];
-      if ($enabled) {
-        $row['actions']['run'] = [
-          '#type' => 'submit',
-          '#name' => 'action_' . $definition['id'],
-          '#button_type' => 'primary',
-          '#value' => (string) $this->t('Sync', ['@label' => $definition['label']]),
-          '#plugin_id' => $definition['id'],
-          '#submit' => ['::sync'],
-        ];
-      }
-      else {
-        $row['next']['#markup'] = '<small>' . $this->t('Never') . '</small>';
-        $row['actions']['run']['#markup'] = '<small>' . $this->t('Disabled') . '</small>';
+      $row['actions']['run'] = [
+        '#type' => 'submit',
+        '#name' => 'action_' . $definition['id'],
+        '#button_type' => 'primary',
+        '#value' => (string) $this->t('Sync', ['@label' => $definition['label']]),
+        '#plugin_id' => $definition['id'],
+        '#submit' => ['::sync'],
+      ];
+      if ($computed) {
+        $row['actions']['run']['#disabled'] = TRUE;
       }
       if (!empty($definition['reset']) && \Drupal::currentUser()->hasPermission('sync reset')) {
         $row['actions']['reset'] = [
@@ -148,6 +147,11 @@ class SyncForm extends FormBase {
           '#submit' => ['::reset'],
         ];
       }
+      $row['log'] = [
+        '#type' => 'link',
+        '#title' => $this->t('Log'),
+        '#url' => Url::fromRoute('sync.log', ['plugin_id' => $definition['id']]),
+      ];
       if (\Drupal::currentUser()->hasPermission('sync debug')) {
         $form['table']['#header']['devel'] = $this->t('Debug');
         $row['devel'] = [

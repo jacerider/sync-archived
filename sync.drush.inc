@@ -61,13 +61,10 @@ function drush_sync($resource_id = NULL) {
     }
     else {
       $queue->deleteQueue();
-      $instance->run(['_sync_as_batch' => TRUE]);
+      $instance->build();
     }
 
-    while ($queue->numberOfItems() > 0) {
-      $context = [];
-      $instance->runBatch($context);
-    }
+    $instance->runJobs();
   }
   else {
     drush_print(dt('Trying to call a non-existent resource. See help using drush sync --help.'));

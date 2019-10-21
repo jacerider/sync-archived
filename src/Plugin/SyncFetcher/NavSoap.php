@@ -2,7 +2,7 @@
 
 namespace Drupal\sync\Plugin\SyncFetcher;
 
-use Drupal\sync\Plugin\SyncFetcherPagedInterface;
+use Drupal\sync\Plugin\SyncDataItems;
 
 /**
  * Plugin implementation of the 'nav_soap' sync resource.
@@ -12,7 +12,7 @@ use Drupal\sync\Plugin\SyncFetcherPagedInterface;
  *   label = @Translation("Nav: Soap"),
  * )
  */
-class NavSoap extends Soap implements SyncFetcherPagedInterface {
+class NavSoap extends Soap {
 
   /**
    * The bookmark key value.
@@ -25,16 +25,14 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
    * {@inheritdoc}
    */
   protected function defaultSettings() {
-    return parent::defaultSettings() + [
+    return [
       // Example filters: [['Field' => 'Description', 'Criteria' => '*PIPE*']].
       'filters' => [],
       'resource_segment' => 'Page',
       'resource_function' => 'ReadMultiple',
       'resource_function_result' => 'ReadMultiple_Result',
       'bookmark_key' => 'Key',
-      'size' => 100,
-      'page_limit' => 0,
-    ];
+    ] + parent::defaultSettings();
   }
 
   /**
@@ -115,36 +113,6 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
   /**
    * {@inheritdoc}
    */
-  public function getSize() {
-    return $this->configuration['size'];
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function setSize($size) {
-    $this->configuration['size'] = $size;
-    return $this;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getPageLimit() {
-    return $this->configuration['page_limit'];
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function setPageLimit($limit) {
-    $this->configuration['page_limit'] = $limit;
-    return $this;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
   public function getUrl() {
     return $this->configuration['url'] . '/' . $this->getResourceSegment() . '/' . $this->getResourceName();
   }
@@ -154,7 +122,7 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
    */
   public function getParams() {
     $this->addParam('filter', $this->getFilters());
-    $this->addParam('setSize', $this->getSize());
+    $this->addParam('setSize', $this->getPageSize());
     if (!empty($this->bookmarkKey)) {
       $this->addParam('bookmarkKey', $this->bookmarkKey);
     }
@@ -164,25 +132,27 @@ class NavSoap extends Soap implements SyncFetcherPagedInterface {
   /**
    * {@inheritdoc}
    */
-  public function fetchPage($previous_data, $page) {
-    if (!empty($this->getPageLimit()) && $page >= $this->getPageLimit()) {
-      return [];
+  public function hasNextPage($page_number = 1, SyncDataItems $previous_data = NULL) {
+    if (!$previous_data->hasItems()) {
+      return FALSE;
     }
-    if (!empty($previous_data) && !empty($this->configuration['bookmark_key'])) {
-      $item = end($previous_data);
-      if (!empty($item[$this->configuration['bookmark_key']])) {
-        $this->bookmarkKey = $item[$this->configuration['bookmark_key']];
-      }
-      return $this->fetch();
-    }
-    return [];
+    return parent::hasNextPage($page_number, $previous_data) && $previous_data->count() == $this->getPageSize();
   }
 
   /**
    * {@inheritdoc}
    */
-  public function fetch() {
+  protected function fetch($page_number, SyncDataItems $previous_data) {
     $data = [];
+
+    // Support paging.
+    if (!empty($previous_data) && !empty($this->configuration['bookmark_key'])) {
+      $item = $previous_data->last();
+      if (!empty($item[$this->configuration['bookmark_key']])) {
+        $this->bookmarkKey = $item[$this->configuration['bookmark_key']];
+      }
+    }
+
     $client = new \SoapClient($this->getUrl(), $this->getOptions());
     $function = $this->getResourceFunction();
     $function_result = $this->getResourceFunctionResult();

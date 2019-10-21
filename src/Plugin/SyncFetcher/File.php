@@ -2,6 +2,7 @@
 
 namespace Drupal\sync\Plugin\SyncFetcher;
 
+use Drupal\sync\Plugin\SyncDataItems;
 use Drupal\sync\Plugin\SyncFetcherBase;
 
 /**
@@ -26,7 +27,7 @@ class File extends SyncFetcherBase {
   /**
    * {@inheritdoc}
    */
-  public function fetch() {
+  protected function fetch($page_number, SyncDataItems $previous_data) {
     $data = [];
     $filepath = \Drupal::root() . '/' . $this->configuration['path'];
     if (!file_exists($filepath)) {

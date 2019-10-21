@@ -3,6 +3,7 @@
 namespace Drupal\sync\Plugin;
 
 use Drupal\Component\Plugin\PluginBase;
+use Drupal\Core\Database\Query\SelectInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\sync\SyncClientManagerInterface;
@@ -23,102 +24,11 @@ use Psr\Log\LogLevel;
 abstract class SyncResourceBase extends PluginBase implements SyncResourceInterface, ContainerFactoryPluginInterface {
 
   /**
-   * The sync client definition.
-   *
-   * @var array
-   */
-  protected $client;
-
-  /**
-   * The sync fetcher.
-   *
-   * @var \Drupal\sync\Plugin\SyncFetcherInterface
-   */
-  protected $fetcher;
-
-  /**
-   * The sync parser.
-   *
-   * @var \Drupal\sync\Plugin\SyncParserInterface
-   */
-  protected $parser;
-
-  /**
-   * The entity type manager service.
-   *
-   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
-   */
-  protected $entityTypeManager;
-
-  /**
-   * The state storage service.
-   *
-   * @var \Drupal\Core\State\StateInterface
-   */
-  protected $state;
-
-  /**
-   * A logger instance.
-   *
-   * @var \Psr\Log\LoggerInterface
-   */
-  protected $logger;
-
-  /**
-   * The fetcher queue object.
-   *
-   * @var \Drupal\Core\Queue\QueueInterface
-   */
-  protected $queue;
-
-  /**
-   * The sync client manager.
-   *
-   * @var \Drupal\sync\SyncClientManagerInterface
-   */
-  protected $syncClientManager;
-
-  /**
-   * The sync fetcher manager.
-   *
-   * @var \Drupal\sync\SyncFetcherManager
-   */
-  protected $syncFetcherManager;
-
-  /**
-   * The sync parser manager.
-   *
-   * @var \Drupal\sync\SyncParserManager
-   */
-  protected $syncParserManager;
-
-  /**
-   * The sync storage.
-   *
-   * @var \Drupal\sync\SyncStorageInterface
-   */
-  protected $syncStorage;
-
-  /**
-   * The sync entity provider.
-   *
-   * @var \Drupal\sync\SyncEntityProviderInterface
-   */
-  protected $syncEntityProvider;
-
-  /**
    * If run should 'run' event when data is empty.
    *
    * @var bool
    */
   protected $runOnEmpty = FALSE;
-
-  /**
-   * If verbose debugging should happen.
-   *
-   * @var bool
-   */
-  protected $verboseLog;
 
   /**
    * The maximum number of items to show when debugging.
@@ -159,7 +69,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     parent::__construct($configuration, $plugin_id, $plugin_definition);
     $this->entityTypeManager = $entity_type_manager;
     $this->state = $state;
-    $this->logger = $logger->get('sync');
+    $this->logger = $logger->get('sync_' . $plugin_id);
     $this->queue = $queue;
     $this->syncClientManager = $sync_client_manager;
     $this->syncFetcherManager = $sync_fetcher_manager;
@@ -191,13 +101,13 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * The value to use as the unique ID.
    *
-   * @param array $data
-   *   The data for a single item.
+   * @param \Drupal\sync\Plugin\SyncDataItem $item
+   *   The item about to be processed.
    *
    * @return string
    *   The value to use as the unique ID.
    */
-  abstract protected function id(array $data);
+  abstract protected function id(SyncDataItem $item);
 
   /**
    * {@inheritdoc}
@@ -208,7 +118,10 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * {@inheritdoc}
+   * Get the entity type id.
+   *
+   * @return string
+   *   The entity type.
    */
   public function getEntityType() {
     $definition = $this->getPluginDefinition();
@@ -216,18 +129,76 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * {@inheritdoc}
+   * Get the entity bundle.
+   *
+   * @param \Drupal\sync\Plugin\SyncDataItem $item
+   *   The data about to be processed.
+   *
+   * @return string
+   *   The bundle.
    */
-  public function getBundle(array $data) {
+  public function getBundle(SyncDataItem $item = NULL) {
     $definition = $this->getPluginDefinition();
     return !empty($definition['bundle']) ? $definition['bundle'] : $this->getEntityType();
   }
 
   /**
-   * {@inheritdoc}
+   * Get initial values.
+   *
+   * The initial values are used when loading/creating the entity that will be
+   * used during the import process. If this is the first time the entity has
+   * been processed, these values can be used to match an un-synced entity with
+   * a pre-existing entity.
+   *
+   * @param \Drupal\sync\Plugin\SyncDataItem $item
+   *   The data about to be processed.
+   *
+   * @return array
+   *   The initial values.
    */
-  public function getGroup(array $data) {
+  public function getInitialValues(SyncDataItem $item) {
+    return [];
+  }
+
+  /**
+   * The sync group.
+   *
+   * Used to segment sync data that uses the same ID. Records a seperate
+   * changed timestamp for each id => group so that sync providers can
+   * manage their own data without overlap. Typically this is handled
+   * automatically and can be ignored.
+   *
+   * @return string
+   *   The sync group.
+   */
+  public function getGroup() {
     return $this->getPluginId();
+  }
+
+  /**
+   * Determine if sync should run even if there are no results.
+   */
+  protected function shouldRunOnEmpty() {
+    return $this->runOnEmpty;
+  }
+
+  /**
+   * Determine if sync uses cleanup.
+   */
+  public function usesCleanup() {
+    $definition = $this->getPluginDefinition();
+    return $definition['cleanup'] == TRUE;
+  }
+
+  /**
+   * Determine if sync uses reset.
+   *
+   * Reset will reset the last run date/time and can be used with resources that
+   * track last run to dermine which items to act on to reset and sync all.
+   */
+  public function usesReset() {
+    $definition = $this->getPluginDefinition();
+    return $definition['reset'] == TRUE;
   }
 
   /**
@@ -274,308 +245,249 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * {@inheritdoc}
+   * Provides oportuniity to alter the fetcher.
+   *
+   * @param \Drupal\sync\Plugin\SyncFetcherInterface $fetcher
+   *   The sync fetcher plugin.
    */
-  public function getLastStart() {
-    return \Drupal::service('plugin.manager.sync_resource')->getLastRunStart($this->pluginDefinition);
-  }
+  protected function alterFetcher(SyncFetcherInterface $fetcher) {}
 
   /**
-   * {@inheritdoc}
+   * Provides oportuniity to alter the parser.
+   *
+   * @param \Drupal\sync\Plugin\SyncParserInterface $parser
+   *   The sync parser plugin.
    */
-  public function getLastEnd() {
-    return \Drupal::service('plugin.manager.sync_resource')->getLastRunEnd($this->pluginDefinition);
-  }
+  protected function alterParser(SyncParserInterface $parser) {}
 
   /**
-   * {@inheritdoc}
+   * Alter raw data before it has been processed.
+   *
+   * @param \Drupal\sync\Plugin\SyncDataItems $data
+   *   The data items collection.
    */
-  public function usesCleanup() {
-    $definition = $this->getPluginDefinition();
-    return $definition['cleanup'] == TRUE;
-  }
+  protected function alterItems(SyncDataItems $data) {}
 
   /**
-   * {@inheritdoc}
+   * Alter raw data item before it has been processed.
+   *
+   * @param \Drupal\sync\Plugin\SyncDataItem $data
+   *   The data items collection.
    */
-  public function usesReset() {
-    $definition = $this->getPluginDefinition();
-    return $definition['reset'] == TRUE;
-  }
+  protected function alterItem(SyncDataItem $data) {}
 
   /**
-   * {@inheritdoc}
+   * Featch the data and create jobs.
+   *
+   * This will make any necessary API calls and store retrieved data as a job
+   * for future processing.
+   *
+   * @param array $context
+   *   Additional context that can be passed to the build.
    */
-  public function run(array $additional = []) {
-    // Reset queue.
+  public function build(array $context = []) {
+    $context += $this->getContext();
+    $this->log(LogLevel::DEBUG, '%plugin_label: Start', $this->getContext());
     $this->queue->deleteQueue();
-    $this->log(LogLevel::NOTICE, '[Sync Start: %plugin_label]', $this->getContext());
     $this->setStartTime();
-    $this->fetchData($additional);
+    $this->buildJobs($context);
   }
 
   /**
-   * {@inheritdoc}
+   * Build data and add to job queue.
+   *
+   * @param array $context
+   *   Additional context.
    */
-  public function runAsBatch() {
-    $this->run([
-      '_sync_as_batch' => TRUE,
-    ]);
-    $this->buildBatch();
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  protected function queueStart(array $additional = []) {
-    $this->queue->createItem([
-      'plugin_id' => $this->getPluginId(),
-      'op' => 'start',
-      'no_count' => TRUE,
-      'data' => $additional,
-    ]);
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  protected function queueProcess(array $data, array $additional = []) {
-    foreach ($data as $item_data) {
-      $this->queue->createItem([
-        'plugin_id' => $this->getPluginId(),
-        'op' => 'process',
-        'data' => $item_data + $additional,
-      ]);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  protected function queueEnd(array $additional = []) {
-    $start = \Drupal::time()->getRequestTime();
-    if ($this->usesCleanup()) {
-      $this->queue->createItem([
-        'plugin_id' => $this->getPluginId(),
-        'op' => 'queueCleanup',
-        'no_count' => TRUE,
-        'data' => $additional,
-      ]);
-    }
-    $this->queue->createItem([
-      'plugin_id' => $this->getPluginId(),
-      'op' => 'end',
-      'no_count' => TRUE,
-      'data' => $additional,
-    ]);
-  }
-
-  /**
-   * Fetch the data.
-   */
-  protected function fetchData($additional = []) {
+  protected function buildJobs(array $context) {
+    $this->log(LogLevel::DEBUG, '%plugin_label: Build Data', $this->getContext());
     try {
-      $data = $this->getData();
-      if (!empty($data) || $this->shouldRunOnEmpty()) {
-        $this->queueStart($additional);
-        $this->queueProcess($data, $additional);
-        $fetcher = $this->getFetcher();
-        if ($fetcher instanceof SyncFetcherPagedInterface) {
-          $this->queueFetchPage($data, $additional);
+      $data = $this->fetchData();
+      if ($data->hasItems() || $this->shouldRunOnEmpty()) {
+        $this->queueStart($context);
+        $this->queueData($data, $context);
+        if ($data->hasNextPage()) {
+          $this->queuePage($data, $context);
         }
         else {
-          $this->queueEnd($additional);
+          $this->queueEnd($context);
         }
       }
-    }
-    catch (\Exception $e) {
-      $this->log(LogLevel::ERROR, '[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
-        '@message' => $e->getMessage(),
-      ]);
-      if (!empty($additional['_sync_as_batch'])) {
-        drupal_set_message($e->getMessage(), 'error');
-      }
-    }
-  }
-
-  /**
-   * Get the data.
-   *
-   * Does not support paging. See fetchData for paging support.
-   *
-   * @return array
-   *   An array of data.
-   */
-  public function getData() {
-    $this->log(LogLevel::INFO, '[Sync Data: %plugin_label] LOAD DATA: %entity_type.', $this->getContext());
-    $data = $this->getFetcher()->fetch();
-    if (!empty($data)) {
-      $data = $this->getParser()->parse($data);
-      $this->alterData($data);
-      $data = $this->filter($data);
-    }
-    return $data;
-  }
-
-  /**
-   * Process all incoming data.
-   *
-   * Be careful as if the fetcher turns a large number of results this can
-   * time out.
-   */
-  public function getProcessedData($additional = []) {
-    $data = $this->getData();
-    $results = [];
-    foreach ($data as $item) {
-      $results[] = $this->process($item + $additional);
-    }
-    return $results;
-  }
-
-  /**
-   * Add a pager batch item.
-   */
-  protected function queueFetchPage($data, $additional = []) {
-    $this->queue->createItem([
-      'plugin_id' => $this->getPluginId(),
-      'op' => 'fetchPage',
-      'no_count' => TRUE,
-      'data' => [
-        'data' => $data,
-        'additional' => $additional,
-      ],
-    ]);
-  }
-
-  /**
-   * Log a message if called during drush operations.
-   */
-  protected function drushLog($string, array $args = [], $type = 'info') {
-    if (PHP_SAPI === 'cli' && function_exists('drush_print')) {
-      $red = "\033[31;40m\033[1m%s\033[0m";
-      $yellow = "\033[1;33;40m\033[1m%s\033[0m";
-      $green = "\033[1;32;40m\033[1m%s\033[0m";
-      switch ($type) {
-        case 'error':
-          $color = $red;
-          break;
-
-        case 'warning':
-          $color = $yellow;
-          break;
-
-        case 'success':
-          $color = $green;
-          break;
-
-        default:
-          $color = "%s";
-          break;
-      }
-      drush_print(strip_tags(sprintf($color, dt($string, $args))));
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function fetchPage(array $batch_data) {
-    try {
-      $page = $this->getPageCount();
-      $this->incrementPageCount();
-      $previous_data = $batch_data['data'];
-      $additional = $batch_data['additional'];
-      $fetcher = $this->getFetcher();
-      $parser = $this->getParser();
-      $this->drushLog('Fetching... [Page: @page | Success: @success | Skipped: @skip | Failed: @fail]', [
-        '@page' => $page,
-        '@success' => $this->getProcessCount('success'),
-        '@skip' => $this->getProcessCount('skip'),
-        '@fail' => $this->getProcessCount('fail'),
-      ], 'success');
-      $new_data = $fetcher->fetchPage($previous_data, $page);
-      $new_data = $parser->parse($new_data);
-      // There are times when filtering may remove all the results. Because of
-      // this, we want to use the pre-filtered data to determine if we should
-      // continue filtering.
-      $new_data_before_filtering = $new_data;
-      $this->alterData($new_data);
-      $new_data = $this->filter($new_data);
-      $context = $this->getContext() + [
-        '%page' => $page,
-        '%new_data_count' => count($new_data),
-      ];
-      if (!empty($new_data_before_filtering)) {
-        // We may have more data to fetch, so run again.
-        $this->log(LogLevel::INFO, '[Sync Fetch: %plugin_label] PAGE %page: %entity_type with %new_data_count records added for processing.', $context);
-        $this->queueProcess($new_data, $additional);
-        $this->queueFetchPage($new_data, $additional);
-      }
       else {
-        // We have all the data we can get.
-        $this->log(LogLevel::INFO, '[Sync Fetch: %plugin_label] PAGE FINISH: %entity_type.', $context);
-        $this->resetPageCount();
-        $this->queueEnd($additional);
-      }
-      if (!empty($additional['_sync_as_batch'])) {
-        $this->buildBatch();
+        $this->queueStart($context);
+        $this->queueEnd($context);
       }
     }
+    catch (SyncSkipException $e) {
+      drupal_set_message($e->getMessage(), 'warning');
+    }
+    catch (SyncFailException $e) {
+      drupal_set_message($e->getMessage(), 'warning');
+    }
     catch (\Exception $e) {
-      $this->log(LogLevel::ERROR, '[Sync Data: %plugin_label] ERROR: %entity_type: @message.', $this->getContext() + [
-        '@message' => $e->getMessage(),
-      ]);
       drupal_set_message($e->getMessage(), 'error');
     }
   }
 
   /**
-   * {@inheritdoc}
+   * Add job that handles sync start.
+   *
+   * @param array $context
+   *   Additional context.
    */
-  public function start(array $data) {
-    $this->resetPageCount()
-      ->resetProcessCount('success')
-      ->resetProcessCount('skip')
-      ->resetProcessCount('fail');
-    \Drupal::service('plugin.manager.sync_resource')->setLastRunStart($this->pluginDefinition, $this->getStartTime());
+  protected function queueStart(array $context = []) {
+    $this->log(LogLevel::DEBUG, '%plugin_label: Add Job: Queue Start', $this->getContext());
+    $this->queue->createItem([
+      'plugin_id' => $this->getPluginId(),
+      'op' => 'doStart',
+      'no_count' => TRUE,
+      'data' => $context,
+    ]);
   }
 
   /**
-   * {@inheritdoc}
+   * Given items, create jobs.
+   *
+   * @param \Drupal\sync\Plugin\SyncDataItems $items
+   *   The data used on the previous request. Used when paging.
+   * @param array $context
+   *   Additional context.
    */
-  public function end(array $data) {
-    $context = $this->getContext() + [
-      '%success' => $this->getProcessCount('success'),
-      '%skip' => $this->getProcessCount('skip'),
-      '%fail' => $this->getProcessCount('fail'),
-    ];
-    drupal_set_message(t('The data import has completed. %success items were successful, %skip items were skipped, and %fail items failed.', $context));
-    $this->resetPageCount()
-      ->resetProcessCount('success')
-      ->resetProcessCount('skip')
-      ->resetProcessCount('fail');
-    $this->log(LogLevel::NOTICE, '[Sync Finish: %plugin_label] Success: %success, Skip: %skip, Fail: %fail', $context);
-    \Drupal::service('plugin.manager.sync_resource')->setLastRunEnd($this->pluginDefinition);
+  protected function queueData(SyncDataItems $items, array $context = []) {
+    $this->log(LogLevel::DEBUG, '%plugin_label: Add Job: Queue Data', $this->getContext());
+    foreach ($items->items() as $item) {
+      $this->queue->createItem([
+        'plugin_id' => $this->getPluginId(),
+        'op' => 'doProcess',
+        'data' => [
+          'item' => $item,
+          'context' => $context,
+        ],
+      ]);
+    }
   }
 
   /**
-   * {@inheritdoc}
+   * Add a page batch item.
+   *
+   * @param \Drupal\sync\Plugin\SyncDataItems $items
+   *   The data used on the previous request. Used when paging.
+   * @param array $context
+   *   Additional context.
    */
-  public function resetLastRun() {
-    \Drupal::service('plugin.manager.sync_resource')->resetLastRun($this->pluginDefinition);
+  protected function queuePage(SyncDataItems $items, array $context = []) {
+    $this->log(LogLevel::DEBUG, '%plugin_label: Add Job: Queue Page', $this->getContext());
+    $this->queue->createItem([
+      'plugin_id' => $this->getPluginId(),
+      'op' => 'doPage',
+      'no_count' => TRUE,
+      'data' => [
+        'items' => $items,
+        'context' => $context,
+      ],
+    ]);
   }
 
   /**
-   * Determine if sync should run even if there are no results.
+   * Create a job that will finish the sync.
+   *
+   * If cleanup is enabled, this will offload final job creation to the
+   * doCleanup job runner.
+   *
+   * @param array $context
+   *   Additional context.
    */
-  protected function shouldRunOnEmpty() {
-    return $this->runOnEmpty;
+  protected function queueEnd(array $context = []) {
+    $this->log(LogLevel::DEBUG, '%plugin_label: Add Job: Queue End', $this->getContext());
+    if ($this->usesCleanup()) {
+      $this->queue->createItem([
+        'plugin_id' => $this->getPluginId(),
+        'op' => 'doCleanup',
+        'no_count' => TRUE,
+        'data' => $context,
+      ]);
+    }
+    else {
+      $this->queue->createItem([
+        'plugin_id' => $this->getPluginId(),
+        'op' => 'doEnd',
+        'no_count' => TRUE,
+        'data' => $context,
+      ]);
+    }
   }
 
   /**
-   * {@inheritdoc}
+   * Runs all queued jobs.
+   *
+   * @return $this
    */
-  public function buildBatch($item_callback = 'runBatchProxy', $title = 'Importing Data') {
+  public function runJobs() {
+    $this->log(LogLevel::DEBUG, '%plugin_label: Run Jobs', $this->getContext());
+    while ($this->queue->numberOfItems() > 0) {
+      $this->runJob();
+    }
+    return $this;
+  }
+
+  /**
+   * Runs the first queued job.
+   *
+   * @return $this
+   */
+  public function runJob() {
+    /** @var \Drupal\Core\Queue\QueueWorkerInterface $queue_worker */
+    $queue_worker = \Drupal::service('plugin.manager.queue_worker')->createInstance('sync_' . $this->pluginId);
+    $item = $this->queue->claimItem();
+    if ($item) {
+      try {
+        $queue_worker->processItem($item->data);
+        $this->queue->deleteItem($item);
+        if (empty($item->data['no_count'])) {
+          $this->incrementProcessCount('success');
+        }
+      }
+      catch (SyncSkipException $e) {
+        $this->queue->deleteItem($item);
+        if (empty($item->data['no_count'])) {
+          $this->incrementProcessCount('skip');
+        }
+      }
+      catch (SyncFailException $e) {
+        $this->queue->deleteItem($item);
+        if (empty($item->data['no_count'])) {
+          $this->incrementProcessCount('fail');
+        }
+      }
+      catch (\Exception $e) {
+        $this->queue->deleteItem($item);
+        if (empty($item->data['no_count'])) {
+          $this->incrementProcessCount('fail');
+        }
+      }
+    }
+    return $this;
+  }
+
+  /**
+   * Run jobs as a batch.
+   */
+  public function runAsBatch() {
+    $this->build([
+      '%sync_as_batch' => TRUE,
+    ]);
+    $this->runBatch();
+  }
+
+  /**
+   * Take each item and build a batch.
+   *
+   * @param string $item_callback
+   *   The item callback that will be run by the batch to process an item.
+   * @param string $title
+   *   The title of the batch.
+   */
+  protected function runBatch($item_callback = 'runBatchProxy', $title = 'Importing Data') {
     $item_count = $this->queue->numberOfItems();
     if ($item_count) {
       $class_name = get_class($this);
@@ -602,164 +514,306 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    * @param string $plugin_id
    *   The plugin id.
    * @param array $context
-   *   The batch context.
+   *   Additional context that can be passed to the build.
    */
   public static function runBatchProxy($plugin_id, array &$context) {
-    \Drupal::service('plugin.manager.sync_resource')->createInstance($plugin_id)->runBatch($context);
+    \Drupal::service('plugin.manager.sync_resource')->createInstance($plugin_id)->runJob();
   }
 
   /**
-   * Runs a batch callback.
+   * The job called at the start of a sync.
    *
    * @param array $context
-   *   The batch context.
+   *   Additional context that can be passed to the build.
    */
-  public function runBatch(array &$context) {
-    /** @var \Drupal\Core\Queue\QueueWorkerInterface $queue_worker */
-    $queue_worker = \Drupal::service('plugin.manager.queue_worker')->createInstance('sync');
-    $item = $this->queue->claimItem();
-    if ($item) {
-      try {
-        $queue_worker->processItem($item->data);
-        $this->queue->deleteItem($item);
-        if (empty($item->data['no_count'])) {
-          $this->incrementProcessCount('success');
-        }
-      }
-      catch (SyncSkipException $e) {
-        drupal_set_message($e->getMessage(), 'warning');
-        $this->queue->deleteItem($item);
-        if (empty($item->data['no_count'])) {
-          $this->incrementProcessCount('skip');
-        }
-      }
-      catch (SyncFailException $e) {
-        drupal_set_message($e->getMessage(), 'error');
-        $this->queue->deleteItem($item);
-        if (empty($item->data['no_count'])) {
-          $this->incrementProcessCount('fail');
-        }
-      }
-      catch (\Exception $e) {
-        drupal_set_message($e->getMessage(), 'error');
-        $this->queue->deleteItem($item);
-        watchdog_exception('sync', $e);
-        if (empty($item->data['no_count'])) {
-          $this->incrementProcessCount('fail');
-        }
-      }
-    }
+  public function doStart(array $context) {
+    $this->log(LogLevel::INFO, '%plugin_label: Run Job: Start', $context);
+    $this->resetPageCount()
+      ->resetProcessCount('success')
+      ->resetProcessCount('skip')
+      ->resetProcessCount('fail');
+    \Drupal::service('plugin.manager.sync_resource')->setLastRunStart($this->pluginDefinition, $this->getStartTime());
   }
 
   /**
-   * {@inheritdoc}
-   */
-  public function filter(array $data) {
-    return $data;
-  }
-
-  /**
-   * {@inheritdoc}
+   * The job called for each item of a sync.
    *
-   * @return mixed
-   *   Will return FALSE if entity type and bundle was not specified. Will retur
-   *   NULL if entity could not be loaded. Will return entity if found/created.
+   * @param array $data
+   *   Is an associative array containing
+   *   ['item' => SyncDataItem, 'context' => []].
    */
-  public function loadEntity(array $data) {
-    $entity = FALSE;
-    $entity_type = $this->getEntityType();
-    $bundle = $this->getBundle($data);
-    if ($entity_type && $bundle) {
-      $entity = $this->syncEntityProvider->getOrNew($this->id($data), $entity_type, $bundle, [], $this->getGroup($data));
-    }
-    return $entity;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function process(array $data) {
-    $context = $this->getContext($data);
+  public function doProcess(array $data) {
+    $item = $data['item'];
+    $context = $data['context'];
     try {
-      $this->prepareItem($data);
-      // Redo context as things may have changed in prepareItem.
-      $context = $this->getContext($data);
-      $id = $this->id($data);
+      $this->prepareItem($item);
+      $id = $this->id($item);
       $context['%id'] = $id;
-      $entity = $this->loadEntity($data);
-      if ($entity instanceof EntityInterface) {
-        if ($this->syncAccess($entity)) {
-          $this->processItem($entity, $data);
-          $success = $this->save($entity, $data);
-          $context['%entity_id'] = $entity->id();
-          $this->drushLog('Processing: %id [%entity_type:%bundle:%entity_id]', $context);
+      $entity = $this->loadEntity($item);
+      if ($entity) {
+        $context['%bundle'] = $entity->getEntityTypeId();
+        $context['%entity_id'] = $entity->id();
+        if ($this->accessEntity($entity)) {
+          $this->processItem($entity, $item);
+          $success = $this->saveItem($entity, $item);
           switch ($success) {
             case SAVED_NEW:
-              $this->log(LogLevel::INFO, '[Sync Item: %plugin_label] NEW: %id for %entity_type:%bundle', $context);
+              $this->log(LogLevel::INFO, '%plugin_label: NEW: %id -> %entity_type:%entity_id', $context);
               break;
 
             case SAVED_UPDATED:
-              $this->log(LogLevel::INFO, '[Sync Item: %plugin_label] UPDATED: %id for %entity_type:%bundle', $context);
+              $this->log(LogLevel::INFO, '%plugin_label: UPDATE: %id -> %entity_type:%entity_id', $context);
               break;
 
             default:
-              $this->log(LogLevel::INFO, '[Sync Item: %plugin_label] SUCCESS: %id for %entity_type:%bundle', $context);
+              $this->log(LogLevel::INFO, '%plugin_label: SUCCESS: %id -> %entity_type:%entity_id', $context);
               break;
           }
           return $entity;
         }
         else {
-          // We save the entity to make sure it is not queued for cleanup.
-          if (!$entity->isNew()) {
-            $entity->save();
-          }
-          throw new SyncSkipException('Entity could not be loaded or sync access was halted.');
+          throw new SyncSkipException('Entity was prevented from being synced.');
         }
       }
       else {
-        if ($entity === FALSE) {
-          // Entity type/bundle not specified. We want to skip silently without
-          // errors.
-        }
-        else {
-          throw new \Exception('Entity could not be loaded.');
-        }
+        throw new SyncFailException('Entity could not be loaded.');
       }
     }
     catch (SyncSkipException $e) {
       $context['%error'] = $e->getMessage();
-      $this->drushLog('Skip: %id [%entity_type:%bundle] %error', $context, 'warning');
-      $this->log(LogLevel::INFO, '[Sync Item Skip: %plugin_label] SKIP: %id for %entity_type:%bundle. Error: %error', $context);
-      // We need to make sure we have updated this record when skipping.
-      if ($this->usesCleanup() && !empty($entity->id())) {
-        $this->syncStorage->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
-      }
-      if ($data['_sync_as_batch']) {
-        // Send up to runBatch.
+      $this->log(LogLevel::WARNING, '%plugin_label: Process Item Skip: %error', $context);
+      if ($data['%sync_as_job']) {
         throw new SyncSkipException($e->getMessage());
       }
     }
     catch (SyncFailException $e) {
       $context['%error'] = $e->getMessage();
-      $this->drushLog('Fail: %id [%entity_type:%bundle] %error', $context, 'error');
-      $this->log(LogLevel::INFO, '[Sync Item Fail: %plugin_label] FAIL: %id for %entity_type:%bundle. Error: %error', $context);
-      // We need to make sure we have updated this record when skipping.
-      if ($this->usesCleanup() && !empty($entity->id())) {
-        $this->syncStorage->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
-      }
-      if ($data['_sync_as_batch']) {
-        // Send up to runBatch.
+      $this->log(LogLevel::ERROR, '%plugin_label: Process Item Fail: %error', $context);
+      if ($data['%sync_as_job']) {
         throw new SyncFailException($e->getMessage());
       }
     }
     catch (\Exception $e) {
       $context['%error'] = $e->getMessage();
-      $this->drushLog('Fail: %id [%entity_type:%bundle] %error', $context, 'error');
-      $this->log(LogLevel::ERROR, '[Sync Item Fail: %plugin_label] FAIL: %id for %entity_type:%bundle with data %data. Error: %error', $context);
-      if ($data['_sync_as_batch']) {
+      $this->log(LogLevel::ERROR, '%plugin_label: Process Item Error: %error', $context);
+      if ($data['%sync_as_job']) {
+        throw new \Exception($e->getMessage());
+      }
+    }
+  }
+
+  /**
+   * The job called for each page of a sync.
+   *
+   * @param array $data
+   *   Is an associative array containing
+   *   ['items' => SyncDataItems, 'context' => []].
+   */
+  public function doPage(array $data) {
+    try {
+      $this->incrementPageCount();
+      $page = $this->getPageCount();
+      $context = $data['context'] + [
+        '%page' => $page,
+      ];
+      $this->log(LogLevel::INFO, '%plugin_label: Fetching [Page: @page | Success: @success | Skipped: @skip | Failed: @fail]', [
+        '@page' => $page,
+        '@success' => $this->getProcessCount('success'),
+        '@skip' => $this->getProcessCount('skip'),
+        '@fail' => $this->getProcessCount('fail'),
+      ]);
+      $data = $this->fetchData($data['items']);
+      if ($data->hasItems()) {
+        $this->queueData($data, $context);
+        if ($data->hasNextPage()) {
+          $this->queuePage($data, $context);
+        }
+        else {
+          $this->queueEnd($context);
+        }
+      }
+      else {
+        $this->queueEnd($context);
+      }
+      if (!empty($context['%sync_as_batch'])) {
+        $this->runBatch();
+      }
+    }
+    catch (SyncSkipException $e) {
+      $context['%error'] = $e->getMessage();
+      $this->log(LogLevel::WARNING, '%plugin_label: Page %page Skip: @message', $context);
+      if (!empty($context['%sync_as_batch'])) {
+        drupal_set_message($e->getMessage(), 'warning');
+      }
+    }
+    catch (SyncFailException $e) {
+      $context['%error'] = $e->getMessage();
+      $this->log(LogLevel::ERROR, '%plugin_label: Page %page Fail: @message', $context);
+      if (!empty($context['%sync_as_batch'])) {
+        drupal_set_message($e->getMessage(), 'warning');
+      }
+    }
+    catch (\Exception $e) {
+      $context['%error'] = $e->getMessage();
+      $this->log(LogLevel::ERROR, '%plugin_label: Page %page Error: @message', $context);
+      if (!empty($context['%sync_as_batch'])) {
+        drupal_set_message($e->getMessage(), 'error');
+      }
+    }
+  }
+
+  /**
+   * The job called to determinie if cleanup is ncessary.
+   *
+   * @param array $context
+   *   Additional context that can be passed to the build.
+   */
+  public function doCleanup(array $context) {
+    $this->log(LogLevel::DEBUG, '%plugin_label: Run Job: Cleanup', $context);
+    try {
+      $query = $this->syncStorage->getDataQuery($this->getGroup());
+      $this->cleanupQueryAlter($query, $context);
+      $results = $query->execute()->fetchAll();
+      if (!empty($results)) {
+        foreach ($results as $sync) {
+          $this->queue->createItem([
+            'plugin_id' => $this->getPluginId(),
+            'op' => 'doClean',
+            'data' => [
+              'sync' => (array) $sync,
+              'context' => $context,
+            ],
+          ]);
+        }
+      }
+      $this->queue->createItem([
+        'plugin_id' => $this->getPluginId(),
+        'op' => 'doEnd',
+        'no_count' => TRUE,
+        'data' => $context,
+      ]);
+      if (!empty($context['%sync_as_batch'])) {
+        $this->runBatch();
+      }
+    }
+    catch (\Exception $e) {
+      $context['%error'] = $e->getMessage();
+      $this->log(LogLevel::ERROR, '[Sync Cleanup: %plugin_label] FAIL: %entity_type:%bundle with data %data. Error: %error', $context);
+      if ($context['%sync_as_job']) {
+        throw new \Exception($e->getMessage());
+      }
+    }
+  }
+
+  /**
+   * The job called for cleaning up an item.
+   *
+   * @param array $data
+   *   Is an associative array containing
+   *   ['sync' => [], 'context' => []].
+   */
+  public function doClean(array $data) {
+    $sync = $data['sync'];
+    $context = $data['context'];
+    $context['%id'] = $sync['id'];
+    $context['%entity_id'] = $sync['entity_id'];
+    $context['%entity_type'] = $sync['entity_type'];
+    $this->log(LogLevel::INFO, '%plugin_label: Clean: %id -> %entity_type:%entity_id', $context);
+    try {
+      $entity = $this->syncStorage->loadEntity($sync['id'], $sync['entity_type']);
+      if ($entity) {
+        $context['%bundle'] = $entity->getEntityTypeId();
+        $context['%entity_id'] = $entity->id();
+        if ($this->accessEntity($entity)) {
+          $this->cleanItem($entity, $sync, $context);
+          $remaining = $this->queue->numberOfItems();
+          if ($remaining % 50 === 1) {
+            $this->log(LogLevel::INFO, '%plugin_label: Cleaning [Remaining: @remaining | Success: @success | Skipped: @skip | Failed: @fail]', $context + [
+              '@remaining' => $remaining,
+              '@success' => $this->getProcessCount('success'),
+              '@skip' => $this->getProcessCount('skip'),
+              '@fail' => $this->getProcessCount('fail'),
+            ]);
+          }
+        }
+        else {
+          throw new SyncSkipException('Entity was prevented from being cleaned.');
+        }
+      }
+      else {
+        throw new SyncFailException('Entity could not be loaded.');
+      }
+    }
+    catch (SyncSkipException $e) {
+      $context['%error'] = $e->getMessage();
+      $this->log(LogLevel::WARNING, '%plugin_label: Clean Item Skip: %error', $context);
+      if ($data['%sync_as_job']) {
+        throw new SyncSkipException($e->getMessage());
+      }
+    }
+    catch (SyncFailException $e) {
+      $context['%error'] = $e->getMessage();
+      $this->log(LogLevel::ERROR, '%plugin_label: Clean Item Fail: %error', $context);
+      if ($data['%sync_as_job']) {
         throw new SyncFailException($e->getMessage());
       }
     }
+    catch (\Exception $e) {
+      $context['%error'] = $e->getMessage();
+      $this->log(LogLevel::ERROR, '%plugin_label: Clean Item Error: %error', $context);
+      if ($data['%sync_as_job']) {
+        throw new \Exception($e->getMessage());
+      }
+    }
+  }
+
+  /**
+   * Job called at the end of a sync.
+   *
+   * @param array $context
+   *   Additional context that can be passed to the build.
+   */
+  public function doEnd(array $context) {
+    $this->log(LogLevel::DEBUG, '%plugin_label: Run Job: End', $context);
+    $context += [
+      '%success' => $this->getProcessCount('success'),
+      '%skip' => $this->getProcessCount('skip'),
+      '%fail' => $this->getProcessCount('fail'),
+    ];
+    $this->resetPageCount()
+      ->resetProcessCount('success')
+      ->resetProcessCount('skip')
+      ->resetProcessCount('fail');
+    $this->log(LogLevel::NOTICE, '%plugin_label: Completed [Success: %success, Skip: %skip, Fail: %fail]', $context);
+    \Drupal::service('plugin.manager.sync_resource')->setLastRunEnd($this->pluginDefinition);
+  }
+
+  /**
+   * Load or create the entity to be processed.
+   *
+   * @param \Drupal\sync\Plugin\SyncDataItem $item
+   *   The data about to be processed.
+   *
+   * @return \Drupal\Core\Entity\EntityInterface
+   *   The entity about to be processed.
+   */
+  public function loadEntity(SyncDataItem $item) {
+    $entity_type = $this->getEntityType();
+    $bundle = $this->getBundle($item);
+    if ($entity_type && $bundle) {
+      return $this->syncEntityProvider->getOrNew($this->id($item), $entity_type, $bundle, $this->getInitialValues($item), $this->getGroup());
+    }
+    return NULL;
+  }
+
+  /**
+   * Check if entity should be able to be modified via sync.
+   *
+   * @return bool
+   *   If TRUE, entity will be synced.
+   */
+  public function accessEntity(EntityInterface $entity) {
+    return empty($entity->syncIsLocked);
   }
 
   /**
@@ -767,197 +821,100 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    *
    * Adding/removing/altering data on a per-item level can be done here.
    *
-   * @param array $data
-   *   The data provided from the Unionware API for a single item.
+   * @param \Drupal\sync\Plugin\SyncDataItem $item
+   *   The data about to be processed.
    */
-  protected function prepareItem(array &$data) {}
+  protected function prepareItem(SyncDataItem $item) {}
 
   /**
    * Extending classes should provide the item process method.
    *
    * @param \Drupal\Core\Entity\EntityInterface $entity
    *   The entity to process.
-   * @param array $data
-   *   The data provided from the Unionware API for a single item.
+   * @param \Drupal\sync\Plugin\SyncDataItem $item
+   *   The data about to be processed.
    */
-  protected function processItem(EntityInterface $entity, array $data) {}
+  protected function processItem(EntityInterface $entity, SyncDataItem $item) {}
 
   /**
    * Save the entity and store record in sync table.
    *
    * @param \Drupal\Core\Entity\EntityInterface $entity
    *   The entity to process.
-   * @param array $data
-   *   The data provided from the Unionware API for a single item.
+   * @param \Drupal\sync\Plugin\SyncDataItem $item
+   *   The data about to be processed.
    *
    * @return bool
    *   A bool representing success.
    */
-  protected function save(EntityInterface $entity, array $data) {
+  protected function saveItem(EntityInterface $entity, SyncDataItem $item) {
     return $entity->save();
   }
 
   /**
-   * {@inheritdoc}
+   * Will clean an entity from the site.
+   *
+   * By default, the entity is deleted.
+   *
+   * @param \Drupal\Core\Entity\EntityInterface $entity
+   *   The entity to be cleaned.
+   * @param array $sync
+   *   The sync database values. Includes id, group, changed, entity_type,
+   *   entity_id, locked.
+   * @param array $context
+   *   Additional context that can be passed to the build.
    */
-  public function syncAccess(EntityInterface $entity) {
-    return empty($entity->syncIsLocked);
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function queueCleanup(array $data) {
-    $context = $this->getContext($data);
-    try {
-      $this->log(LogLevel::INFO, '[Sync Cleanup: %plugin_label] CLEANUP: %entity_type.', $context);
-      $query = $this->syncStorage->getDataQuery($this->getGroup($data));
-      $this->cleanupQueryAlter($query, $data);
-      $results = $query->execute()->fetchAllAssoc('id');
-      if (!empty($results)) {
-        foreach ($results as $sync) {
-          $this->queue->createItem([
-            'plugin_id' => $this->getPluginId(),
-            'op' => 'clean',
-            'data' => [
-              'sync' => $sync,
-              'data' => $data,
-            ],
-          ]);
-        }
-        if (!empty($data['_sync_as_batch'])) {
-          $this->buildBatch();
-        }
-      }
-    }
-    catch (\Exception $e) {
-      $context['%error'] = $e->getMessage();
-      $this->log(LogLevel::ERROR, '[Sync Cleanup: %plugin_label] FAIL: %entity_type:%bundle with data %data. Error: %error', $context);
-      if ($data['_sync_as_batch']) {
-        throw new \Exception($e->getMessage());
-      }
+  protected function cleanItem(EntityInterface $entity, array $sync, array $context) {
+    $status = $entity->delete();
+    if ($status) {
+      $this->log(LogLevel::INFO, '%plugin_label: Clean: %id -> %entity_type:%entity_id', $context);
     }
   }
 
   /**
    * Allow altering of cleanup query.
+   *
+   * @param \Drupal\Core\Database\Query\SelectInterface $query
+   *   The query.
+   * @param array $context
+   *   Additional context that can be passed to the build.
    */
-  protected function cleanupQueryAlter($query, array $data) {
+  protected function cleanupQueryAlter(SelectInterface $query, array $context) {
     $query->condition('sync_data.changed', $this->getStartTime(), '<');
     $query->condition('sync.locked', 0);
   }
 
   /**
-   * {@inheritdoc}
+   * Get data via fetcher.
+   *
+   * @param \Drupal\sync\Plugin\SyncDataItems $previous_data
+   *   The data used on the previous request. Used when paging.
+   *
+   * @return \Drupal\sync\Plugin\SyncDataItems
+   *   A collection of items.
    */
-  public function clean(array $data) {
-    $sync = $data['sync'];
-    $data = $data['data'];
-    $context = $this->getContext($data);
-    $context['%id'] = $sync->id;
-    try {
-      $entity = $this->syncStorage->loadEntity($sync->id, $sync->entity_type);
-      if ($entity) {
-        if ($this->syncAccess($entity)) {
-          $this->cleanExecute($entity, $sync, $context);
-        }
-        else {
-          throw new SfHaltException('Entity could not be loaded or sync access was halted.');
-        }
-      }
-      else {
-        throw new \Exception('Entity could not be loaded.');
-      }
+  public function fetchData(SyncDataItems $previous_data = NULL) {
+    $fetcher = $this->getFetcher();
+    $data = $fetcher->doFetch($this->getPageCount(), $previous_data);
+    $data = $this->getParser()->doParse($data);
+    $data = new SyncDataItems($data);
+    $data->setHasNextPage($fetcher->hasNextPage($this->getPageCount(), $data));
+    $this->alterItems($data);
+    foreach ($data as $item) {
+      $this->alterItem($item);
     }
-    catch (SfHaltException $e) {
-      $this->log(LogLevel::INFO, '[Sync Clean Skip: %plugin_label] SKIP: %id for %entity_type:%bundle', $context);
-      if ($data['_sync_as_batch']) {
-        // Send up to runBatch.
-        throw new SfHaltException($e->getMessage());
-      }
-    }
-    catch (\Exception $e) {
-      $context['%error'] = $e->getMessage();
-      $this->log(LogLevel::ERROR, '[Sync Clean: %plugin_label] FAIL: %id for %entity_type:%bundle with data %data. Error: %error', $context);
-      if ($data['_sync_as_batch']) {
-        throw new \Exception($e->getMessage());
-      }
-    }
+    return $data;
   }
 
   /**
-   * {@inheritdoc}
-   */
-  public function cleanExecute(EntityInterface $entity, $sync, $context) {
-    $status = $entity->delete();
-    if ($status) {
-      // Entity cleanup is handled in hook_entity_delete().
-      $this->log(LogLevel::INFO, '[Sync Clean: %plugin_label] DELETE: %entity_id for %entity_type:%bundle', $context);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function alterFetcher(SyncFetcherInterface $request) {
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function alterParser(SyncParserInterface $parser) {
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function alterData(array &$data) {
-    try {
-      $this->alterItems($data);
-      foreach ($data as &$item) {
-        $this->alterItem($item);
-      }
-    }
-    catch (\Exception $e) {
-      $context = $this->getContext($data) + [
-        '%message' => $e->getMessage(),
-      ];
-      $this->log(LogLevel::ERROR, '[Sync Alter Data: %plugin_label] FAIL: %entity_type:%bundle with data %data. Error: %error', $context);
-    }
-    foreach ($data as &$item) {
-      try {
-        $this->alterItem($item);
-      }
-      catch (\Exception $e) {
-        $context = $this->getContext($data) + [
-          '%message' => $e->getMessage(),
-        ];
-        $this->log(LogLevel::ERROR, '[Sync Alter Data: %plugin_label] FAIL ITEM: %entity_type:%bundle with data %data. Error: %error', $context);
-      }
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function alterItems(array &$data) {
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function alterItem(&$data) {
-  }
-
-  /**
-   * {@inheritdoc}
+   * Debug a single request.
    */
   public function debug() {
-    $data = $this->getData();
-    if (!empty($data) && count($data) > $this->maxDebug) {
-      $data = array_slice($data, 0, $this->maxDebug);
-    }
-    if (!empty($data)) {
+    try {
+      $data = $this->fetchData();
+      if ($data->hasItems() && $data->count() > $this->maxDebug) {
+        $data->slice(0, $this->maxDebug);
+      }
       foreach ($data as &$item) {
         try {
           $this->prepareItem($item);
@@ -972,52 +929,29 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
           drupal_set_message($e->getMessage(), 'error');
         }
       }
+      if (\Drupal::service('module_handler')->moduleExists('kint')) {
+        ksm($data->toArray());
+      }
+      else {
+        print '<pre>' . print_r($data->toArray(), FALSE) . '</pre>';
+        die;
+      }
     }
-    if (\Drupal::service('module_handler')->moduleExists('kint')) {
-      ksm($data);
+    catch (SyncSkipException $e) {
+      drupal_set_message($e->getMessage(), 'warning');
     }
-    else {
-      print '<pre>' . print_r($data, FALSE) . '</pre>';
-      die;
+    catch (SyncFailException $e) {
+      drupal_set_message($e->getMessage(), 'warning');
     }
-  }
-
-  /**
-   * Log event.
-   *
-   * Runtime errors that do not require immediate action but should typically
-   * be logged and monitored.
-   *
-   * @param mixed $level
-   *   The log level.
-   * @param string $message
-   *   The log message.
-   * @param array $context
-   *   The log context.
-   */
-  protected function log($level, $message, array $context = []) {
-    if ($level !== LogLevel::INFO || $this->verboseLog()) {
-      $this->logger->log($level, $message, $context);
+    catch (\Exception $e) {
+      drupal_set_message($e->getMessage(), 'error');
     }
   }
 
   /**
-   * Should verbose logging be used.
-   *
-   * @return bool
-   *   TRUE if verbose logging should be used.
+   * Get the initial context.
    */
-  protected function verboseLog() {
-    if (!isset($this->verboseLog)) {
-      $this->verboseLog = \Drupal::config('devel.settings')->get('log_verbose');
-    }
-    return $this->verboseLog;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  protected function getContext(array $data = []) {
+  protected function getContext() {
     $context = [
       '%plugin_id' => $this->getPluginId(),
       '%plugin_label' => $this->label(),
@@ -1025,21 +959,8 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       '%id' => 'na',
       '%bundle' => 'na',
     ];
-    if (!empty($data)) {
-      $context = [
-        '%bundle' => $this->getBundle($data),
-        '%data' => print_r($data, TRUE),
-      ] + $context;
-    }
     return $context;
   }
-
-  /**
-   * Get the temp storage service.
-   */
-  // protected function getTempStore() {
-  //   return \Drupal::service('user.shared_tempstore')->get('sync');
-  // }
 
   /**
    * Get the state key.
@@ -1115,6 +1036,116 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   protected function resetProcessCount($type = 'success') {
     $this->state->delete($this->getStateKey() . '.process.' . $type);
     return $this;
+  }
+
+  /**
+   * Log event.
+   *
+   * Runtime errors that do not require immediate action but should typically
+   * be logged and monitored.
+   *
+   * @param mixed $level
+   *   The log level.
+   * @param string $message
+   *   The log message.
+   * @param array $context
+   *   The log context.
+   */
+  protected function log($level, $message, array $context = []) {
+    $log_to_db = FALSE;
+    $log_to_messages = FALSE;
+    $log_to_drush = FALSE;
+    switch ($level) {
+      case LogLevel::EMERGENCY:
+      case LogLevel::ALERT:
+      case LogLevel::CRITICAL:
+      case LogLevel::ERROR:
+        $message_level = 'error';
+        $log_to_db = TRUE;
+        $log_to_messages = TRUE;
+        $log_to_drush = FALSE;
+        break;
+
+      case LogLevel::WARNING:
+        $message_level = 'warning';
+        $log_to_db = TRUE;
+        $log_to_messages = TRUE;
+        $log_to_drush = FALSE;
+        break;
+
+      case LogLevel::NOTICE:
+        $message_level = 'status';
+        $log_to_db = TRUE;
+        $log_to_messages = TRUE;
+        $log_to_drush = TRUE;
+        break;
+
+      case LogLevel::INFO:
+        $message_level = 'status';
+        $log_to_db = $this->verboseLog();
+        $log_to_drush = TRUE;
+        break;
+
+      case LogLevel::DEBUG:
+        $message_level = 'status';
+        $log_to_db = $this->verboseLog();
+        $log_to_drush = $this->verboseLog();
+        break;
+    }
+    if ($log_to_db) {
+      $this->logger->log($level, $message, $context);
+    }
+    if ($log_to_messages && !empty($context['%sync_as_batch'])) {
+      drupal_set_message(format_string($message, $context), $message_level);
+    }
+    if ($log_to_drush) {
+      $this->drushLog(format_string($message, $context), [], $level);
+    }
+  }
+
+  /**
+   * Log a message if called during drush operations.
+   */
+  protected function drushLog($string, array $args = [], $type = 'info') {
+    if (PHP_SAPI === 'cli' && function_exists('drush_print')) {
+      $red = "\033[31;40m\033[1m%s\033[0m";
+      $yellow = "\033[1;33;40m\033[1m%s\033[0m";
+      $green = "\033[1;32;40m\033[1m%s\033[0m";
+      switch ($type) {
+        case LogLevel::EMERGENCY:
+        case LogLevel::ALERT:
+        case LogLevel::CRITICAL:
+        case LogLevel::ERROR:
+          $color = $red;
+          break;
+
+        case LogLevel::WARNING:
+          $color = $yellow;
+          break;
+
+        case LogLevel::NOTICE:
+          $color = $green;
+          break;
+
+        default:
+          $color = "%s";
+          break;
+      }
+      drush_print(strip_tags(sprintf($color, dt($string, $args))));
+    }
+  }
+
+  /**
+   * Should verbose logging be used.
+   *
+   * @return bool
+   *   TRUE if verbose logging should be used.
+   */
+  protected function verboseLog() {
+    if (!isset($this->verboseLog)) {
+      $this->verboseLog = \Drupal::config('sync.settings')->get('log_verbose');
+    }
+    return $this->verboseLog;
   }
 
 }

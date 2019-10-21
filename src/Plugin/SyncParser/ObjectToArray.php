@@ -18,7 +18,7 @@ class ObjectToArray extends SyncParserBase {
   /**
    * {@inheritdoc}
    */
-  public function parse($data) {
+  protected function parse($data) {
     return json_decode(json_encode($data), TRUE);
   }
 

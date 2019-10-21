@@ -34,7 +34,7 @@ class Xml extends SyncParserBase {
   /**
    * {@inheritdoc}
    */
-  public function parse($data) {
+  protected function parse($data) {
     if (empty($data)) {
       return [];
     }

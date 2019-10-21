@@ -2,6 +2,7 @@
 
 namespace Drupal\sync\Plugin\SyncFetcher;
 
+use Drupal\sync\Plugin\SyncDataItems;
 use Drupal\sync\Plugin\SyncFetcherBase;
 
 /**
@@ -27,7 +28,7 @@ class Entity extends SyncFetcherBase {
   /**
    * {@inheritdoc}
    */
-  public function fetch() {
+  protected function fetch($page_number, SyncDataItems $previous_data) {
     $data = [];
     foreach (\Drupal::entityTypeManager()->getStorage($this->configuration['entity_type'])->loadByProperties($this->configuration['properties']) as $entity) {
       $data[]['entity'] = $entity;
