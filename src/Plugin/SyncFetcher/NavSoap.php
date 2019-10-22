@@ -27,6 +27,7 @@ class NavSoap extends Soap {
   protected function defaultSettings() {
     return [
       // Example filters: [['Field' => 'Description', 'Criteria' => '*PIPE*']].
+      'page_size' => 100,
       'filters' => [],
       'resource_segment' => 'Page',
       'resource_function' => 'ReadMultiple',
