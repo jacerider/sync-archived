@@ -260,6 +260,10 @@ class SyncResourceManager extends DefaultPluginManager {
     $key = self::getStateKey($definition);
     $timestamp = $timestamp ? $timestamp : \Drupal::time()->getCurrentTime();
     $state->set($key, $timestamp);
+    \Drupal::service('cache_tags.invalidator')->invalidateTags([
+      'sync.start',
+      'sync.start.' . $definition['id'],
+    ]);
     return $timestamp;
   }
 
@@ -294,6 +298,10 @@ class SyncResourceManager extends DefaultPluginManager {
     $key = self::getStateKey($definition) . '.end';
     $timestamp = $timestamp ? $timestamp : \Drupal::time()->getCurrentTime();
     $state->set($key, $timestamp);
+    \Drupal::service('cache_tags.invalidator')->invalidateTags([
+      'sync.end',
+      'sync.end.' . $definition['id'],
+    ]);
     return $timestamp;
   }
 
@@ -340,6 +348,13 @@ class SyncResourceManager extends DefaultPluginManager {
     $weight = $a['weight'] - $b['weight'];
     if ($weight) {
       return $weight;
+    }
+
+    // Sort by cron.
+    $manager = \Drupal::service('plugin.manager.sync_resource');
+    $time = $manager->getNextCronTime($a) - $manager->getNextCronTime($b);
+    if ($time) {
+      return $time;
     }
 
     // Sort by label.

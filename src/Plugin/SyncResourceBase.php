@@ -16,12 +16,20 @@ use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\sync\SyncStorageInterface;
 use Drupal\Core\State\StateInterface;
+use Drupal\sync\SyncIgnoreException;
 use Psr\Log\LogLevel;
 
 /**
  * Base class for Sync Resource plugins.
  */
 abstract class SyncResourceBase extends PluginBase implements SyncResourceInterface, ContainerFactoryPluginInterface {
+
+  /**
+   * The entity type manager.
+   *
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
+   */
+  protected $entityTypeManager;
 
   /**
    * If run should 'run' event when data is empty.
@@ -321,6 +329,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         $this->queueEnd($context);
       }
     }
+    catch (SyncIgnoreException $e) {
+      // Do nothing.
+    }
     catch (SyncSkipException $e) {
       drupal_set_message($e->getMessage(), 'warning');
     }
@@ -449,6 +460,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         if (empty($item->data['no_count'])) {
           $this->incrementProcessCount('success');
         }
+      }
+      catch (SyncIgnoreException $e) {
+        $this->queue->deleteItem($item);
       }
       catch (SyncSkipException $e) {
         $this->queue->deleteItem($item);
@@ -582,6 +596,11 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         throw new SyncFailException('Entity could not be loaded.');
       }
     }
+    catch (SyncIgnoreException $e) {
+      if ($data['%sync_as_job']) {
+        throw new SyncIgnoreException($e->getMessage());
+      }
+    }
     catch (SyncSkipException $e) {
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::WARNING, '%plugin_label: Process Item Skip: %error', $context);
@@ -613,15 +632,15 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    *   ['items' => SyncDataItems, 'context' => []].
    */
   public function doPage(array $data) {
+    $this->incrementPageCount();
+    $page = $this->getPageCount();
+    $context = [
+      '@page' => $page,
+      '@success' => $this->getProcessCount('success'),
+      '@skip' => $this->getProcessCount('skip'),
+      '@fail' => $this->getProcessCount('fail'),
+    ] + $data['context'];
     try {
-      $this->incrementPageCount();
-      $page = $this->getPageCount();
-      $context = [
-        '@page' => $page,
-        '@success' => $this->getProcessCount('success'),
-        '@skip' => $this->getProcessCount('skip'),
-        '@fail' => $this->getProcessCount('fail'),
-      ] + $data['context'];
       $this->log(LogLevel::INFO, '%plugin_label: Fetching [Page: @page | Success: @success | Skipped: @skip | Failed: @fail]', $context);
       $data = $this->fetchData($data['items']);
       if ($data->hasItems()) {
@@ -640,23 +659,26 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         $this->runBatch();
       }
     }
+    catch (SyncIgnoreException $e) {
+      // Do nothing.
+    }
     catch (SyncSkipException $e) {
       $context['%error'] = $e->getMessage();
-      $this->log(LogLevel::WARNING, '%plugin_label: Page %page Skip: @message', $context);
+      $this->log(LogLevel::WARNING, '%plugin_label: Page %page Skip: %error', $context);
       if (!empty($context['%sync_as_batch'])) {
         drupal_set_message($e->getMessage(), 'warning');
       }
     }
     catch (SyncFailException $e) {
       $context['%error'] = $e->getMessage();
-      $this->log(LogLevel::ERROR, '%plugin_label: Page %page Fail: @message', $context);
+      $this->log(LogLevel::ERROR, '%plugin_label: Page %page Fail: %error', $context);
       if (!empty($context['%sync_as_batch'])) {
         drupal_set_message($e->getMessage(), 'warning');
       }
     }
     catch (\Exception $e) {
       $context['%error'] = $e->getMessage();
-      $this->log(LogLevel::ERROR, '%plugin_label: Page %page Error: @message', $context);
+      $this->log(LogLevel::ERROR, '%plugin_label: Page %page Error: %error', $context);
       if (!empty($context['%sync_as_batch'])) {
         drupal_set_message($e->getMessage(), 'error');
       }
@@ -743,6 +765,11 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
       else {
         throw new SyncFailException('Entity could not be loaded.');
+      }
+    }
+    catch (SyncIgnoreException $e) {
+      if ($data['%sync_as_job']) {
+        throw new SyncIgnoreException($e->getMessage());
       }
     }
     catch (SyncSkipException $e) {
@@ -920,6 +947,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         try {
           $this->prepareItem($item);
         }
+        catch (SyncIgnoreException $e) {
+          // Do nothing.
+        }
         catch (SyncSkipException $e) {
           drupal_set_message($e->getMessage(), 'warning');
         }
@@ -937,6 +967,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
         print '<pre>' . print_r($data->toArray(), FALSE) . '</pre>';
         die;
       }
+    }
+    catch (SyncIgnoreException $e) {
+      // Do nothing.
     }
     catch (SyncSkipException $e) {
       drupal_set_message($e->getMessage(), 'warning');
