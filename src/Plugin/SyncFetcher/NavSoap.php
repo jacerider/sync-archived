@@ -149,9 +149,7 @@ class NavSoap extends Soap {
     // Support paging.
     if (!empty($previous_data) && !empty($this->configuration['bookmark_key'])) {
       $item = $previous_data->last();
-      if (!empty($item[$this->configuration['bookmark_key']])) {
-        $this->bookmarkKey = $item[$this->configuration['bookmark_key']];
-      }
+      $this->bookmarkKey = $item[$this->configuration['bookmark_key']];
     }
 
     $client = new \SoapClient($this->getUrl(), $this->getOptions());
@@ -164,6 +162,7 @@ class NavSoap extends Soap {
         $data = [$data];
       }
     }
+
     return $data;
   }
 
