@@ -94,6 +94,16 @@ class Soap extends SyncFetcherBase {
   public function getOptions() {
     $options = $this->configuration['options'];
     $options += $this->getAuth();
+    $context = stream_context_create([
+      'ssl' => [
+        'verify_peer' => FALSE,
+        'verify_peer_name' => FALSE,
+        'allow_self_signed' => TRUE,
+      ],
+    ]);
+    $options += [
+      'stream_context' => $context,
+    ];
     return $options;
   }
 
