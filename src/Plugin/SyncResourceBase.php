@@ -333,13 +333,13 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       // Do nothing.
     }
     catch (SyncSkipException $e) {
-      drupal_set_message($e->getMessage(), 'warning');
+      \Drupal::messenger()->addMessage($e->getMessage(), 'warning');
     }
     catch (SyncFailException $e) {
-      drupal_set_message($e->getMessage(), 'warning');
+      \Drupal::messenger()->addMessage($e->getMessage(), 'warning');
     }
     catch (\Exception $e) {
-      drupal_set_message($e->getMessage(), 'error');
+      \Drupal::messenger()->addMessage($e->getMessage(), 'error');
     }
   }
 
@@ -666,21 +666,21 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::WARNING, '%plugin_label: Page %page Skip: %error', $context);
       if (!empty($context['%sync_as_batch'])) {
-        drupal_set_message($e->getMessage(), 'warning');
+        \Drupal::messenger()->addMessage($e->getMessage(), 'warning');
       }
     }
     catch (SyncFailException $e) {
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::ERROR, '%plugin_label: Page %page Fail: %error', $context);
       if (!empty($context['%sync_as_batch'])) {
-        drupal_set_message($e->getMessage(), 'warning');
+        \Drupal::messenger()->addMessage($e->getMessage(), 'warning');
       }
     }
     catch (\Exception $e) {
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::ERROR, '%plugin_label: Page %page Error: %error', $context);
       if (!empty($context['%sync_as_batch'])) {
-        drupal_set_message($e->getMessage(), 'error');
+        \Drupal::messenger()->addMessage($e->getMessage(), 'error');
       }
     }
   }
@@ -951,13 +951,13 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
           // Do nothing.
         }
         catch (SyncSkipException $e) {
-          drupal_set_message($e->getMessage(), 'warning');
+          \Drupal::messenger()->addMessage($e->getMessage(), 'warning');
         }
         catch (SyncFailException $e) {
-          drupal_set_message($e->getMessage(), 'warning');
+          \Drupal::messenger()->addMessage($e->getMessage(), 'warning');
         }
         catch (\Exception $e) {
-          drupal_set_message($e->getMessage(), 'error');
+          \Drupal::messenger()->addMessage($e->getMessage(), 'error');
         }
       }
       if (\Drupal::service('module_handler')->moduleExists('kint')) {
@@ -972,13 +972,13 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       // Do nothing.
     }
     catch (SyncSkipException $e) {
-      drupal_set_message($e->getMessage(), 'warning');
+      \Drupal::messenger()->addMessage($e->getMessage(), 'warning');
     }
     catch (SyncFailException $e) {
-      drupal_set_message($e->getMessage(), 'warning');
+      \Drupal::messenger()->addMessage($e->getMessage(), 'warning');
     }
     catch (\Exception $e) {
-      drupal_set_message($e->getMessage(), 'error');
+      \Drupal::messenger()->addMessage($e->getMessage(), 'error');
     }
   }
 
@@ -1130,7 +1130,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $this->logger->log($level, $message, $context);
     }
     if ($log_to_messages && !empty($context['%sync_as_batch'])) {
-      drupal_set_message(format_string($message, $context), $message_level);
+      \Drupal::messenger()->addMessage(format_string($message, $context), $message_level);
     }
     if ($log_to_drush) {
       $this->drushLog(format_string($message, $context), [], $level);
