@@ -476,12 +476,12 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
           $this->incrementProcessCount('fail');
         }
       }
-      catch (\Exception $e) {
-        $this->queue->deleteItem($item);
-        if (empty($item->data['no_count'])) {
-          $this->incrementProcessCount('fail');
-        }
-      }
+      // catch (\Exception $e) {
+      //   $this->queue->deleteItem($item);
+      //   if (empty($item->data['no_count'])) {
+      //     $this->incrementProcessCount('fail');
+      //   }
+      // }
     }
     return $this;
   }
