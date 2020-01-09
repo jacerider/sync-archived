@@ -64,6 +64,7 @@ class SyncForm extends FormBase {
   public function buildForm(array $form, FormStateInterface $form_state) {
     $request_time = \Drupal::time()->getCurrentTime();
     $date_formatter = \Drupal::service('date.formatter');
+    $user = $this->currentUser();
 
     $definitions = $this->syncResourceManager->getActiveDefinitions();
     $form['table'] = [
@@ -126,19 +127,24 @@ class SyncForm extends FormBase {
         '%start' => $last_run_start ? $date_formatter->format($last_run_start) : '-',
         '%end' => $last_run_end ? $date_formatter->format($last_run_end) : '-',
       ]);
+      $enable = $user->hasPermission('sync run all');
+      if (!$enable && $next) {
+        $enable = $user->hasPermission('sync run scheduled');
+      }
+      if ($computed) {
+        $enable = FALSE;
+      }
       $row['actions'] = ['#type' => 'actions', '#attributes' => ['style' => 'white-space: nowrap;']];
       $row['actions']['run'] = [
         '#type' => 'submit',
         '#name' => 'action_' . $definition['id'],
         '#button_type' => 'primary',
         '#value' => (string) $this->t('Sync', ['@label' => $definition['label']]),
+        '#disabled' => !$enable,
         '#plugin_id' => $definition['id'],
         '#submit' => ['::sync'],
       ];
-      if ($computed) {
-        $row['actions']['run']['#disabled'] = TRUE;
-      }
-      if (!empty($definition['reset']) && \Drupal::currentUser()->hasPermission('sync reset')) {
+      if (!empty($definition['reset']) && $user->hasPermission('sync reset')) {
         $row['actions']['reset'] = [
           '#type' => 'submit',
           '#name' => 'reset_' . $definition['id'],
@@ -152,7 +158,7 @@ class SyncForm extends FormBase {
         '#title' => $this->t('Log'),
         '#url' => Url::fromRoute('sync.log', ['plugin_id' => $definition['id']]),
       ];
-      if (\Drupal::currentUser()->hasPermission('sync debug')) {
+      if ($user->hasPermission('sync debug')) {
         $form['table']['#header']['devel'] = $this->t('Debug');
         $row['devel'] = [
           '#type' => 'submit',

@@ -4,6 +4,10 @@
 'manage sync':
   title: 'Manage sync'
   restrict access: true
+'sync run all':
+  title: 'Allow running all sync resources'
+'sync run scheduled':
+  title: 'Allow running scheduled sync resources'
 'sync reset':
   title: 'Allow sync reset'
 'sync debug':
