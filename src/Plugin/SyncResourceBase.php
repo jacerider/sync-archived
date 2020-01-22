@@ -3,6 +3,7 @@
 namespace Drupal\sync\Plugin;
 
 use Drupal\Component\Plugin\PluginBase;
+use Drupal\Component\Render\FormattableMarkup;
 use Drupal\Core\Database\Query\SelectInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -476,12 +477,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
           $this->incrementProcessCount('fail');
         }
       }
-      // catch (\Exception $e) {
-      //   $this->queue->deleteItem($item);
-      //   if (empty($item->data['no_count'])) {
-      //     $this->incrementProcessCount('fail');
-      //   }
-      // }
     }
     return $this;
   }
@@ -555,11 +550,67 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * The job called for each item of a sync.
    *
+   * @param array $datas
+   *   An array of items.
+   */
+  public function manualProcessMultiple(array $datas) {
+    $results = [];
+    foreach ($datas as $data) {
+      if ($result = $this->manualProcess($data)) {
+        $results[] = $result;
+      }
+    }
+    return $results;
+  }
+
+  /**
+   * The job called for each item of a sync.
+   *
+   * @return \Drupal\core\Entity\EntityInterface[]
+   *   An array of created/updated entities.
+   */
+  public function manualProcess() {
+    try {
+      $results = [];
+      $data = $this->fetchData();
+      foreach ($data as $item) {
+        $result = $this->doProcess([
+          'item' => $item,
+          'context' => $this->getContext(),
+          '%sync_as_job' => FALSE,
+        ]);
+        if ($result) {
+          $results[] = $result;
+        }
+      }
+      return $results;
+    }
+    catch (SyncIgnoreException $e) {
+      return $results;
+    }
+    catch (SyncSkipException $e) {
+      \Drupal::messenger()->addMessage($e->getMessage(), 'warning');
+      return $results;
+    }
+    catch (SyncFailException $e) {
+      \Drupal::messenger()->addMessage($e->getMessage(), 'warning');
+      return $results;
+    }
+    catch (\Exception $e) {
+      \Drupal::messenger()->addMessage($e->getMessage(), 'error');
+      return $results;
+    }
+  }
+
+  /**
+   * The job called for each item of a sync.
+   *
    * @param array $data
    *   Is an associative array containing
    *   ['item' => SyncDataItem, 'context' => []].
    */
   public function doProcess(array $data) {
+    /** @var \Drupal\sync\Plugin\SyncDataItem $item */
     $item = $data['item'];
     $context = $data['context'];
     try {
@@ -1130,18 +1181,18 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $this->logger->log($level, $message, $context);
     }
     if ($log_to_messages && !empty($context['%sync_as_batch'])) {
-      \Drupal::messenger()->addMessage(format_string($message, $context), $message_level);
+      \Drupal::messenger()->addMessage(new FormattableMarkup($message, $context), $message_level);
     }
     if ($log_to_drush) {
-      $this->drushLog(format_string($message, $context), [], $level);
+      $this->cliLog(new FormattableMarkup($message, $context), [], $level);
     }
   }
 
   /**
    * Log a message if called during drush operations.
    */
-  protected function drushLog($string, array $args = [], $type = 'info') {
-    if (PHP_SAPI === 'cli' && function_exists('drush_print')) {
+  protected function cliLog($string, array $args = [], $type = 'info') {
+    if (PHP_SAPI === 'cli') {
       $red = "\033[31;40m\033[1m%s\033[0m";
       $yellow = "\033[1;33;40m\033[1m%s\033[0m";
       $green = "\033[1;32;40m\033[1m%s\033[0m";
@@ -1165,7 +1216,8 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
           $color = "%s";
           break;
       }
-      drush_print(strip_tags(sprintf($color, dt($string, $args))));
+      $message = strip_tags(sprintf($color, dt($string, $args)));
+      fwrite(STDOUT, $message . "\n");
     }
   }
 

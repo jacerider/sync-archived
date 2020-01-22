@@ -28,40 +28,68 @@ abstract class SyncResourceMediaFileBase extends SyncResourceFileBase {
   protected $mediaFieldName = 'field_media_image';
 
   /**
+   * The label of the media entity.
+   *
+   * @var string
+   */
+  protected $mediaEntityLabel;
+
+  /**
    * Get media field where the file entity reference will be stored.
    *
    * @return string
    *   The field name.
    */
-  protected function getMediaFieldname(array $data) {
+  protected function getMediaFieldname(SyncDataItem $item) {
     return $this->mediaFieldName;
   }
 
   /**
    * {@inheritdoc}
    */
-  protected function processItem(EntityInterface $entity, array $data) {
-    $this->processItemAsMedia($entity, $data);
+  protected function getMediaEntityLabel(SyncDataItem $item) {
+    return $this->mediaEntityLabel;
+  }
+
+  /**
+   * Set the entity label.
+   *
+   * @param string $label
+   *   The label.
+   */
+  public function setMediaEntityLabel($label) {
+    $this->mediaEntityLabel = $label;
+    return $this;
   }
 
   /**
    * {@inheritdoc}
    */
-  protected function processItemAsMedia(MediaInterface $entity, $data) {
-    $field_name = $this->getMediaFieldname($data);
+  protected function processItem(EntityInterface $entity, SyncDataItem $item) {
+    $this->processItemAsMedia($entity, $item);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function processItemAsMedia(MediaInterface $entity, SyncDataItem $item) {
+    $field_name = $this->getMediaFieldname($item);
     if (!$entity->hasField($field_name)) {
       throw new SyncFailException('The media entity does not have a field name ' . $field_name);
     }
 
-    $file = $this->syncEntityProvider->getOrNew($this->id($data), 'file', 'file');
-    $this->processItemAsFile($file, $data);
+    $file = $this->syncEntityProvider->getOrNew($this->id($item), 'file', 'file');
+    $this->processItemAsFile($file, $item);
     if ($file->isNew()) {
       $file->save();
     }
 
-    $entity->setName($file->getFilename());
+    $entity_label = $this->getMediaEntityLabel($item);
+    $label = !empty($entity_label) ? $entity_label : $file->getFilename();
+    $entity->setName($label);
     $entity->get($field_name)->setValue([
       'target_id' => $file->id(),
+      'alt' => $label,
     ]);
 
   }

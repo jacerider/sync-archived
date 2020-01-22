@@ -53,7 +53,7 @@ class Http extends SyncFetcherBase implements ContainerFactoryPluginInterface {
       'url' => '',
       'query' => [],
       'as_content' => TRUE,
-    ];
+    ] + parent::defaultSettings();
   }
 
   /**
@@ -67,6 +67,20 @@ class Http extends SyncFetcherBase implements ContainerFactoryPluginInterface {
       $container->get('logger.factory'),
       $container->get('http_client')
     );
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getUrl() {
+    return $this->configuration['url'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setUrl($url) {
+    $this->configuration['url'] = $url;
   }
 
   /**

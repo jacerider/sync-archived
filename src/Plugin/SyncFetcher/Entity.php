@@ -22,7 +22,7 @@ class Entity extends SyncFetcherBase {
     return [
       'entity_type' => '',
       'properties' => [],
-    ];
+    ] + parent::defaultSettings();
   }
 
   /**
