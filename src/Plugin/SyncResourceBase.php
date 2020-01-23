@@ -33,6 +33,62 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   protected $entityTypeManager;
 
   /**
+   * The state service.
+   *
+   * @var Drupal\Core\State\StateInterface
+   */
+  protected $state;
+
+  /**
+   * The logger channel service.
+   *
+   * @var \Drupal\Core\Logger\LoggerChannelInterface
+   */
+  protected $logger;
+
+  /**
+   * The queue manager.
+   *
+   * @var \Drupal\Core\Queue\QueueInterface
+   */
+  protected $queue;
+
+  /**
+   * The sync client manager.
+   *
+   * @var \Drupal\sync\SyncClientManagerInterface
+   */
+  protected $syncClientManager;
+
+  /**
+   * The sync fetcher manager.
+   *
+   * @var \Drupal\sync\Plugin\SyncFetcherManager
+   */
+  protected $syncFetcherManager;
+
+  /**
+   * The sync parser manager.
+   *
+   * @var \Drupal\sync\Plugin\SyncParserManager
+   */
+  protected $syncParserManager;
+
+  /**
+   * The sync storage.
+   *
+   * @var \Drupal\sync\SyncStorageInterface
+   */
+  protected $syncStorage;
+
+  /**
+   * The sync entity provider.
+   *
+   * @var \Drupal\sync\SyncEntityProviderInterface
+   */
+  protected $syncEntityProvider;
+
+  /**
    * If run should 'run' event when data is empty.
    *
    * @var bool
