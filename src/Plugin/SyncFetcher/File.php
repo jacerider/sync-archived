@@ -21,7 +21,7 @@ class File extends SyncFetcherBase {
   protected function defaultSettings() {
     return [
       'path' => '',
-    ];
+    ] + parent::defaultSettings();
   }
 
   /**
