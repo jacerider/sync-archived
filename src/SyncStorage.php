@@ -35,9 +35,6 @@ class SyncStorage implements SyncStorageInterface {
 
   /**
    * {@inheritdoc}
-   *
-   * @return \Drupal\Core\Database\Query\SelectInterface
-   *   The select query.
    */
   public function getQuery() {
     return $this->database->select('sync')->fields('sync');
@@ -45,9 +42,6 @@ class SyncStorage implements SyncStorageInterface {
 
   /**
    * {@inheritdoc}
-   *
-   * @return \Drupal\Core\Database\Query\SelectInterface
-   *   The select query.
    */
   public function getDataQuery($group = 'default') {
     $query = $this->database->select('sync_data');
@@ -70,7 +64,30 @@ class SyncStorage implements SyncStorageInterface {
   }
 
   /**
-   * Builds a query.
+   * {@inheritdoc}
+   */
+  public function deleteByProperties(array $values = []) {
+    $data = $this->loadByProperties($values);
+    foreach ($data as $id => $item) {
+      $query = $this->database->delete('sync');
+      $this->buildPropertyQuery($query, $values);
+      $status = $query->execute();
+      if ($status) {
+        $query = $this->database->delete('sync_data');
+        $query->condition('id', $id);
+        $query->execute();
+      }
+    }
+  }
+
+  /**
+   * Builds an entity query.
+   *
+   * @param \Drupal\Core\Database\Query\ConditionInterface $query
+   *   Query instance.
+   * @param array $values
+   *   An associative array of properties of the entity, where the keys are the
+   *   property names and the values are the values those properties must have.
    */
   protected function buildPropertyQuery(ConditionInterface $query, array $values) {
     foreach ($values as $name => $value) {
@@ -110,10 +127,11 @@ class SyncStorage implements SyncStorageInterface {
       ])
       ->execute();
     if ($status) {
+      $changed = \Drupal::time()->getRequestTime();
       $status = $this->database->merge('sync_data')
         ->key(['id' => $id, 'group' => $group])
         ->fields([
-          'changed' => \Drupal::time()->getRequestTime(),
+          'changed' => $changed,
         ])
         ->execute();
     }
@@ -130,31 +148,6 @@ class SyncStorage implements SyncStorageInterface {
     $query->condition('group', $group);
     $query->range(0, 1);
     return $query->execute()->fetchField(0);
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function deleteByProperties(array $values = []) {
-    $data = $this->loadByProperties($values);
-    foreach ($data as $id => $item) {
-      $query = $this->database->delete('sync');
-      $this->buildPropertyQuery($query, $values);
-      $status = $query->execute();
-      if ($status) {
-        $status = $this->database->delete('sync_data')
-          ->condition('id', $id)
-          ->execute();
-      }
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function wipe() {
-    $this->database->delete('sync')->execute();
-    $this->database->delete('sync_data')->execute();
   }
 
 }
