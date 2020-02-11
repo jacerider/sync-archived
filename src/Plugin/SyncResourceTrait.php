@@ -17,8 +17,8 @@ trait SyncResourceTrait {
   /**
    * Load resource.
    *
-   * @return array
-   *   An array of data.
+   * @return \Drupal\sync\Plugin\SyncResourceInterface
+   *   The sync resource.
    */
   protected function getResource($resource_id) {
     return $this->syncResourceManager()->getResource($resource_id);

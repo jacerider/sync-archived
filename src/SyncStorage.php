@@ -129,7 +129,7 @@ class SyncStorage implements SyncStorageInterface {
     if ($status) {
       $changed = \Drupal::time()->getRequestTime();
       $status = $this->database->merge('sync_data')
-        ->key(['id' => $id, 'group' => $group])
+        ->key(['id' => $id, 'segment' => $group])
         ->fields([
           'changed' => $changed,
         ])
@@ -145,7 +145,7 @@ class SyncStorage implements SyncStorageInterface {
     $query = $this->database->select('sync_data');
     $query->fields('sync_data', ['changed']);
     $query->condition('id', $id);
-    $query->condition('group', $group);
+    $query->condition('segment', $group);
     $query->range(0, 1);
     return $query->execute()->fetchField(0);
   }

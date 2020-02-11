@@ -65,7 +65,7 @@ function sync_schema() {
         'default' => 0,
         'description' => "The sync id.",
       ],
-      'group' => [
+      'segment' => [
         'type' => 'varchar_ascii',
         'length' => 255,
         'not null' => TRUE,
@@ -80,7 +80,7 @@ function sync_schema() {
         'description' => 'Unix timestamp of when the entity was last updated',
       ],
     ],
-    'primary key' => ['id', 'group'],
+    'primary key' => ['id', 'segment'],
   ];
   return $schema;
 }

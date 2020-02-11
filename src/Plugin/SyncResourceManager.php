@@ -96,6 +96,9 @@ class SyncResourceManager extends DefaultPluginManager {
    *
    * @param string $resource_id
    *   The resource definition id.
+   *
+   * @return \Drupal\sync\Plugin\SyncResourceInterface
+   *   The sync resource.
    */
   public function getResource($resource_id) {
     if ($this->hasDefinition($resource_id)) {

@@ -267,10 +267,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * The sync client.
-   *
-   * @return array
-   *   The client definition.
+   * {@inheritdoc}
    */
   public function getClient() {
     if (!isset($this->client)) {
@@ -280,10 +277,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * The sync fetcher.
-   *
-   * @return \Drupal\sync\Plugin\SyncFetcherInterface
-   *   The sync fetcher plugin.
+   * {@inheritdoc}
    */
   public function getFetcher() {
     if (!isset($this->fetcher)) {
@@ -295,10 +289,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * The sync parser.
-   *
-   * @return \Drupal\sync\Plugin\SyncParserInterface
-   *   The sync fetcher plugin.
+   * {@inheritdoc}
    */
   public function getParser() {
     if (!isset($this->parser)) {
@@ -342,15 +333,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   protected function alterItem(SyncDataItem $data) {}
 
   /**
-   * Featch the data and create jobs.
-   *
-   * This will make any necessary API calls and store retrieved data as a job
-   * for future processing.
-   *
-   * @param array $context
-   *   Additional context that can be passed to the build.
-   *
-   * @return $this
+   * {@inheritdoc}
    */
   public function build(array $context = []) {
     $context += $this->getContext();
@@ -489,9 +472,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * Runs all queued jobs.
-   *
-   * @return $this
+   * {@inheritdoc}
    */
   public function runJobs() {
     $this->log(LogLevel::DEBUG, '%plugin_label: Run Jobs', $this->getContext());
@@ -502,9 +483,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * Runs the first queued job.
-   *
-   * @return $this
+   * {@inheritdoc}
    */
   public function runJob() {
     /** @var \Drupal\Core\Queue\QueueWorkerInterface $queue_worker */
@@ -604,10 +583,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * The job called for each item of a sync.
-   *
-   * @param array $datas
-   *   An array of items.
+   * {@inheritdoc}
    */
   public function manualProcessMultiple(array $datas) {
     $results = [];
@@ -620,10 +596,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * The job called for each item of a sync.
-   *
-   * @return \Drupal\core\Entity\EntityInterface[]
-   *   An array of created/updated entities.
+   * {@inheritdoc}
    */
   public function manualProcess() {
     try {
@@ -1020,13 +993,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   }
 
   /**
-   * Get data via fetcher.
-   *
-   * @param \Drupal\sync\Plugin\SyncDataItems $previous_data
-   *   The data used on the previous request. Used when paging.
-   *
-   * @return \Drupal\sync\Plugin\SyncDataItems
-   *   A collection of items.
+   * {@inheritdoc}
    */
   public function fetchData(SyncDataItems $previous_data = NULL) {
     $fetcher = $this->getFetcher();

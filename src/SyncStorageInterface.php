@@ -10,7 +10,6 @@ use Drupal\Core\Entity\EntityInterface;
 interface SyncStorageInterface {
 
   /**
-<<<<<<< HEAD
    * {@inheritdoc}
    *
    * @return \Drupal\Core\Database\Query\SelectInterface
@@ -83,10 +82,5 @@ interface SyncStorageInterface {
    *   The sync group id.
    */
   public function lastUpdated($id, $group = 'default');
-=======
-   * Load an entity by sync id and entity type.
-   */
-  public function loadEntity($id, $entity_type);
->>>>>>> refs/subrepo/web/modules/community/sync/fetch
 
 }
