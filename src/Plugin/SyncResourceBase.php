@@ -677,28 +677,28 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
     }
     catch (SyncIgnoreException $e) {
-      if ($data['%sync_as_job']) {
+      if (empty($data['%sync_as_job'])) {
         throw new SyncIgnoreException($e->getMessage());
       }
     }
     catch (SyncSkipException $e) {
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::WARNING, '%plugin_label: Process Item Skip: %error', $context);
-      if ($data['%sync_as_job']) {
+      if (empty($data['%sync_as_job'])) {
         throw new SyncSkipException($e->getMessage());
       }
     }
     catch (SyncFailException $e) {
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::ERROR, '%plugin_label: Process Item Fail: %error', $context);
-      if ($data['%sync_as_job']) {
+      if (empty($data['%sync_as_job'])) {
         throw new SyncFailException($e->getMessage());
       }
     }
     catch (\Exception $e) {
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::ERROR, '%plugin_label: Process Item Error: %error', $context);
-      if ($data['%sync_as_job']) {
+      if (empty($data['%sync_as_job'])) {
         throw new \Exception($e->getMessage());
       }
     }
