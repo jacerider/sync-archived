@@ -63,7 +63,7 @@ function sync_entity_insert(EntityInterface $entity) {
  */
 function sync_entity_update(EntityInterface $entity) {
   if (isset($entity->__sync_id)) {
-    \Drupal::service('sync.storage')->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
+    \Drupal::service('sync.storage')->saveEntity($entity);
   }
 }
 
