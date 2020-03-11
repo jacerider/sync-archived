@@ -74,6 +74,14 @@ interface SyncStorageInterface {
   public function save($id, EntityInterface $entity, $locked = FALSE, $group = 'default');
 
   /**
+   * Save a sync record given an entity.
+   *
+   * @param \Drupal\Core\Entity\EntityInterface $entity
+   *   The entity being saved.
+   */
+  public function saveEntity(EntityInterface $entity);
+
+  /**
    * Get last updated datetime by sync id and group.
    *
    * @param string $id

@@ -48,9 +48,7 @@ class SyncStorage implements SyncStorageInterface {
     $query->join('sync', 'sync', 'sync.id = sync_data.id');
     $query->fields('sync_data');
     $query->fields('sync');
-    if ($group) {
-      $query->condition('sync_data.group', $group);
-    }
+    $query->condition('sync_data.segment', $group);
     return $query;
   }
 
@@ -136,6 +134,15 @@ class SyncStorage implements SyncStorageInterface {
         ->execute();
     }
     return $status;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function saveEntity(EntityInterface $entity) {
+    if (isset($entity->__sync_id)) {
+      $this->save($entity->__sync_id, $entity, FALSE, $entity->__sync_group);
+    }
   }
 
   /**
