@@ -677,11 +677,17 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
     }
     catch (SyncIgnoreException $e) {
+      if ($entity && !$entity->isNew()) {
+        $this->syncStorage->saveEntity($entity);
+      }
       if (empty($data['%sync_as_job'])) {
         throw new SyncIgnoreException($e->getMessage());
       }
     }
     catch (SyncSkipException $e) {
+      if ($entity && !$entity->isNew()) {
+        $this->syncStorage->saveEntity($entity);
+      }
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::WARNING, '%plugin_label: %id: Process Item Skip: %error', $context);
       if (empty($data['%sync_as_job'])) {
@@ -689,6 +695,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
     }
     catch (SyncFailException $e) {
+      if ($entity && !$entity->isNew()) {
+        $this->syncStorage->saveEntity($entity);
+      }
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::ERROR, '%plugin_label: %id: Process Item Fail: %error', $context);
       if (empty($data['%sync_as_job'])) {
@@ -696,6 +705,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
     }
     catch (\Exception $e) {
+      if ($entity && !$entity->isNew()) {
+        $this->syncStorage->saveEntity($entity);
+      }
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::ERROR, '%plugin_label: %id: Process Item Error: %error', $context);
       if (empty($data['%sync_as_job'])) {
