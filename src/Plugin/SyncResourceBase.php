@@ -640,6 +640,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    */
   public function doProcess(array $data) {
     /** @var \Drupal\sync\Plugin\SyncDataItem $item */
+    $entity = NULL;
     $item = $data['item'];
     $context = $data['context'];
     try {
