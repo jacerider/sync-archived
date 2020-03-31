@@ -73,9 +73,17 @@ abstract class SyncFetcherBase extends PluginBase implements SyncFetcherInterfac
    */
   protected function defaultSettings() {
     return [
+      'page_enabled' => FALSE,
       'page_size' => 0,
       'page_limit' => 0,
     ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isPageEnabled() {
+    return !empty($this->configuration['page_enabled']);
   }
 
   /**
@@ -122,6 +130,22 @@ abstract class SyncFetcherBase extends PluginBase implements SyncFetcherInterfac
    * {@inheritdoc}
    */
   public function hasNextPage($page_number = 1, SyncDataItems $previous_data = NULL) {
+    // Is enabled?
+    if (!$this->isPageEnabled()) {
+      return FALSE;
+    }
+    if ($previous_data) {
+      // If there are no items in our previous request, we are done.
+      if (!$previous_data->hasItems()) {
+        return FALSE;
+      }
+      $page_size = $this->getPageSize();
+      // If we have a set page size and there are items but they are less than
+      // our page size, we are done.
+      if ($page_size && $page_size > $previous_data->count()) {
+        return FALSE;
+      }
+    }
     return $this->getPageLimit() === 0 || $page_number < $this->getPageLimit();
   }
 

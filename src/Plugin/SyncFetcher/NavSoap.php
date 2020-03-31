@@ -27,6 +27,7 @@ class NavSoap extends Soap {
   protected function defaultSettings() {
     return [
       // Example filters: [['Field' => 'Description', 'Criteria' => '*PIPE*']].
+      'page_enabled' => TRUE,
       'page_size' => 100,
       'filters' => [],
       'resource_segment' => 'Page',
@@ -128,16 +129,6 @@ class NavSoap extends Soap {
       $this->addParam('bookmarkKey', $this->bookmarkKey);
     }
     return parent::getParams();
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function hasNextPage($page_number = 1, SyncDataItems $previous_data = NULL) {
-    if (!$previous_data->hasItems()) {
-      return FALSE;
-    }
-    return parent::hasNextPage($page_number, $previous_data) && $previous_data->count() == $this->getPageSize();
   }
 
   /**
