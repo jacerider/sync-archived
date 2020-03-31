@@ -15,7 +15,7 @@ use Drupal\sync\Plugin\SyncParserBase;
 class Xml extends SyncParserBase {
 
   /**
-   * Constructs a SyncFetcher object.
+   * Constructs a SyncParser object.
    *
    * @param array $configuration
    *   A configuration array containing information about the plugin instance.
