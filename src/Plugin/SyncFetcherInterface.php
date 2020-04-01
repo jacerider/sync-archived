@@ -10,6 +10,46 @@ use Drupal\Component\Plugin\PluginInspectionInterface;
 interface SyncFetcherInterface extends PluginInspectionInterface {
 
   /**
+   * Check if paging is enabled.
+   *
+   * @return bool
+   *   TRUE if paging is enabled.
+   */
+  public function isPageEnabled();
+
+  /**
+   * Get the page size.
+   *
+   * @return int
+   *   The page size.
+   */
+  public function getPageSize();
+
+  /**
+   * Set page size.
+   *
+   * @param int $size
+   *   The page size.
+   */
+  public function setPageSize($size);
+
+  /**
+   * Get the page limit.
+   *
+   * @return int
+   *   The page limit.
+   */
+  public function getPageLimit();
+
+  /**
+   * Set page limit.
+   *
+   * @param int $limit
+   *   The page limit.
+   */
+  public function setPageLimit($limit);
+
+  /**
    * Prepare for fetching.
    *
    * @param int $page_number
