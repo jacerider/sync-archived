@@ -10,6 +10,16 @@ use Drupal\Component\Plugin\PluginInspectionInterface;
 interface SyncFetcherInterface extends PluginInspectionInterface {
 
   /**
+   * Set paging status.
+   *
+   * @param bool $status
+   *   Set the paging status.
+   *
+   * @return $this
+   */
+  public function setPageEnabled($status = TRUE);
+
+  /**
    * Check if paging is enabled.
    *
    * @return bool
