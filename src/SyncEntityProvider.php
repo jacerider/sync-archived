@@ -2,6 +2,7 @@
 
 namespace Drupal\sync;
 
+use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\EntityChangedInterface;
 use Drupal\Core\Session\AccountInterface;
@@ -107,13 +108,14 @@ class SyncEntityProvider implements SyncEntityProviderInterface {
     if ($bundle_key) {
       $values[$bundle_key] = $bundle;
     }
-    $uid = $this->currentUser->id();
-    if (empty($uid)) {
-      $uid = 1;
+    $entity = $this->entityTypeManager->getStorage($entity_type)->create($values);
+    if ($entity instanceof ContentEntityInterface && $field_name = $entity->getEntityType()->getKey('uid')) {
+      $uid = $this->currentUser->id();
+      if (empty($uid)) {
+        $uid = 1;
+      }
+      $entity->set($field_name, $uid);
     }
-    $entity = $this->entityTypeManager->getStorage($entity_type)->create([
-      'uid' => $uid,
-    ] + $values);
     $this->attachProperties($entity, $id, $group);
     return $entity;
   }
