@@ -17,11 +17,20 @@ class Csv extends SyncParserBase {
   /**
    * {@inheritdoc}
    */
+  protected function defaultSettings() {
+    return [
+      'header' => TRUE,
+    ] + parent::defaultSettings();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   protected function parse($data) {
     $delimiter = ",";
     $skip_empty_lines = TRUE;
     $trim_fields = TRUE;
-    $use_header = TRUE;
+    $use_header = $this->configuration['header'];
     $enc = preg_replace('/(?<!")""/', '!!Q!!', $data);
     $enc = preg_replace_callback(
         '/"(.*?)"/s',
@@ -31,8 +40,6 @@ class Csv extends SyncParserBase {
         $enc
     );
     $lines = preg_split($skip_empty_lines ? ($trim_fields ? '/( *\R)+/s' : '/\R+/s') : '/\R/s', $enc);
-    // $header = $use_header ? array_shift($lines) : [];
-    // ksm($header);
     $data = array_map(
       function ($line) use ($delimiter, $trim_fields) {
         $fields = $trim_fields ? array_map('trim', explode($delimiter, $line)) : explode($delimiter, $line);
