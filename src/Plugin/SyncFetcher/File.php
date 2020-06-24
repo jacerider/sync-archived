@@ -29,7 +29,10 @@ class File extends SyncFetcherBase {
    */
   protected function fetch($page_number, SyncDataItems $previous_data) {
     $data = [];
-    $filepath = \Drupal::root() . '/' . $this->configuration['path'];
+    $filepath = $this->configuration['path'];
+    if (strpos($this->configuration['path'], '://') === FALSE) {
+      $filepath = \Drupal::root() . '/' . $filepath;
+    }
     if (!file_exists($filepath)) {
       $message = t('The file %filepath could not be found.', [
         '%filepath' => $filepath,
