@@ -1050,9 +1050,11 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       if (\Drupal::service('module_handler')->moduleExists('kint')) {
         ksm($data->toArray());
       }
+      elseif (function_exists('kint')) {
+        ksm($data->toArray());
+      }
       else {
-        print '<pre>' . print_r($data->toArray(), FALSE) . '</pre>';
-        die;
+        \Drupal::messenger()->addMessage('<pre>' . print_r($data->toArray(), TRUE) . '</pre>');
       }
     }
     catch (SyncIgnoreException $e) {

@@ -27,46 +27,18 @@ class Csv extends SyncParserBase {
    * {@inheritdoc}
    */
   protected function parse($data) {
-    $delimiter = ",";
-    $skip_empty_lines = TRUE;
-    $trim_fields = TRUE;
     $use_header = $this->configuration['header'];
-    $enc = preg_replace('/(?<!")""/', '!!Q!!', $data);
-    $enc = preg_replace_callback(
-        '/"(.*?)"/s',
-        function ($field) {
-            return urlencode(utf8_encode($field[1]));
-        },
-        $enc
-    );
-    $lines = preg_split($skip_empty_lines ? ($trim_fields ? '/( *\R)+/s' : '/\R+/s') : '/\R/s', $enc);
-    $data = array_map(
-      function ($line) use ($delimiter, $trim_fields) {
-        $fields = $trim_fields ? array_map('trim', explode($delimiter, $line)) : explode($delimiter, $line);
-        return array_map(
-          function ($field) {
-            return html_entity_decode(htmlentities(str_replace('!!Q!!', '"', utf8_decode(urldecode($field)))));
-          },
-          $fields
-        );
-      },
-      $lines
-    );
+    $rows = array_filter(explode(PHP_EOL, $data));
+    $csv = array_map('str_getcsv', $rows);
     if ($use_header) {
-      $header = array_shift($data);
-      foreach ($header as &$value) {
-        $value = strtolower(preg_replace([
-          '/[^a-zA-Z0-9]+/',
-          '/-+/',
-          '/^-+/',
-          '/-+$/',
-        ], ['_', '_', '', ''], $value));
-      }
-      foreach ($data as &$fields) {
-        $fields = array_combine($header, $fields);
-      }
+      array_walk($csv, function (&$a) use ($csv) {
+        if (count($csv[0]) === count($a)) {
+          $a = array_combine($csv[0], $a);
+        }
+      });
+      array_shift($csv);
     }
-    return $data;
+    return $csv;
   }
 
 }
