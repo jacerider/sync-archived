@@ -12,7 +12,7 @@ use Drupal\sync\SyncFailException;
  * This resource is intended to be used from within another resource.
  *
  * @SyncResource(
- *   id = "sync_remote_image_file",
+ *   id = "sync_remote_image_as_file",
  *   label = @Translation("Remote Image as File"),
  *   client = "sync_remote_file",
  *   entity_type = "file",
