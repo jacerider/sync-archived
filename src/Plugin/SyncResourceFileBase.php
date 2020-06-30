@@ -110,6 +110,8 @@ abstract class SyncResourceFileBase extends SyncResourceBase {
       if ($destination != $entity->getFileUri()) {
         $replace = $this->getReplaceBehavior($item);
         file_move($entity, $destination, $replace);
+        $entity->setFileUri($destination);
+        $entity->save();
       }
     }
   }
