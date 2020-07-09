@@ -29,7 +29,7 @@ trait SyncResourceRedirectTrait {
    */
   public function createRedirectForEntity(EntityInterface $entity, $from_url, $status_code = '301') {
     if (!$entity->isNew()) {
-      $to_url = 'internal:/' . $entity->toUrl()->getInternalPath();
+      $to_url = $entity->toUrl()->getInternalPath();
       $this->createRedirect($from_url, $to_url, $status_code, $entity->language()->getId());
     }
   }
