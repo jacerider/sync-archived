@@ -10,6 +10,18 @@ use Drupal\Component\Plugin\PluginInspectionInterface;
 interface SyncFetcherInterface extends PluginInspectionInterface {
 
   /**
+   * Set setting.
+   *
+   * @param string $key
+   *   The key.
+   * @param mixed $value
+   *   The value.
+   *
+   * @return $this
+   */
+  public function setSetting($key, $value);
+
+  /**
    * Set paging status.
    *
    * @param bool $status

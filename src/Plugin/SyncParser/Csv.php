@@ -20,6 +20,7 @@ class Csv extends SyncParserBase {
   protected function defaultSettings() {
     return [
       'header' => TRUE,
+      'delimiter' => ',',
     ] + parent::defaultSettings();
   }
 
@@ -29,7 +30,9 @@ class Csv extends SyncParserBase {
   protected function parse($data) {
     $use_header = $this->configuration['header'];
     $rows = array_filter(explode(PHP_EOL, $data));
-    $csv = array_map('str_getcsv', $rows);
+    $csv = array_map(function ($row) {
+      return str_getcsv($row, $this->configuration['delimiter']);
+    }, $rows);
     if ($use_header) {
       array_walk($csv, function (&$a) use ($csv) {
         if (count($csv[0]) === count($a)) {

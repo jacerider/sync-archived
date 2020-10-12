@@ -28,7 +28,6 @@ class File extends SyncFetcherBase {
    * {@inheritdoc}
    */
   protected function fetch($page_number, SyncDataItems $previous_data) {
-    $data = [];
     $filepath = $this->configuration['path'];
     if (strpos($this->configuration['path'], '://') === FALSE) {
       $filepath = \Drupal::root() . '/' . $filepath;
@@ -37,7 +36,7 @@ class File extends SyncFetcherBase {
       $message = t('The file %filepath could not be found.', [
         '%filepath' => $filepath,
       ]);
-      drupal_set_message($message, 'error');
+      \Drupal::messenger()->addError($message);
       throw new \Exception($message);
     }
     return file_get_contents($filepath);

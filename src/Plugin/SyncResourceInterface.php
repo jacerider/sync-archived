@@ -10,6 +10,14 @@ use Drupal\Component\Plugin\PluginInspectionInterface;
 interface SyncResourceInterface extends PluginInspectionInterface {
 
   /**
+   * Get the resource label.
+   *
+   * @return string
+   *   The resource label.
+   */
+  public function label();
+
+  /**
    * The sync client.
    *
    * @return array
@@ -64,6 +72,11 @@ interface SyncResourceInterface extends PluginInspectionInterface {
    * @return $this
    */
   public function build(array $context = []);
+
+  /**
+   * Run jobs as a batch.
+   */
+  public function runAsBatch();
 
   /**
    * Runs all queued jobs.

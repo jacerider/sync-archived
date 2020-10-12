@@ -45,6 +45,7 @@ class SyncController extends ControllerBase {
    *   Return Hello string.
    */
   public function log($plugin_id) {
+    /** @var \Drupal\sync\Plugin\SyncResourceInterface $resource */
     $resource = $this->syncResourceManager->getResource($plugin_id);
     if (empty($resource)) {
       throw new NotFoundHttpException('Plugin does not exist.');
