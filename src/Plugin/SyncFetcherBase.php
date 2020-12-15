@@ -89,6 +89,14 @@ abstract class SyncFetcherBase extends PluginBase implements SyncFetcherInterfac
   /**
    * {@inheritdoc}
    */
+  public function setPageEnabled($status = TRUE) {
+    $this->configuration['page_enabled'] = $status;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getPageSize() {
     return $this->configuration['page_size'];
   }

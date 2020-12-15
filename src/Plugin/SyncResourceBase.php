@@ -122,9 +122,9 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
    *   The item queue object.
    * @param \Drupal\sync\SyncClientManagerInterface $sync_client_manager
    *   The sync client manager.
-   * @param \Drupal\sync\SyncFetcherManager $sync_fetcher_manager
+   * @param \Drupal\sync\Plugin\SyncFetcherManager $sync_fetcher_manager
    *   The sync fetcher manager.
-   * @param \Drupal\sync\SyncParserManager $sync_parser_manager
+   * @param \Drupal\sync\Plugin\SyncParserManager $sync_parser_manager
    *   The sync parser manager.
    * @param \Drupal\sync\SyncStorageInterface $sync_storage
    *   The sync storage.
@@ -1065,9 +1065,11 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       if (\Drupal::service('module_handler')->moduleExists('kint')) {
         ksm($data->toArray());
       }
+      elseif (function_exists('kint')) {
+        ksm($data->toArray());
+      }
       else {
-        print '<pre>' . print_r($data->toArray(), FALSE) . '</pre>';
-        die;
+        \Drupal::messenger()->addMessage('<pre>' . print_r($data->toArray(), TRUE) . '</pre>');
       }
     }
     catch (SyncIgnoreException $e) {

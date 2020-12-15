@@ -3,6 +3,7 @@
 namespace Drupal\sync\Plugin;
 
 use Drupal\Core\Entity\EntityInterface;
+use Drupal\file\FileInterface;
 use Drupal\media\MediaInterface;
 use Drupal\sync\SyncFailException;
 
@@ -78,10 +79,14 @@ abstract class SyncResourceMediaFileBase extends SyncResourceFileBase {
       throw new SyncFailException('The media entity does not have a field name ' . $field_name);
     }
 
+    /** @var \Drupal\file\FileInterface $file */
     $file = $this->syncEntityProvider->getOrNew($this->id($item), 'file', 'file');
     $this->processItemAsFile($file, $item);
     if ($file->isNew()) {
       $file->save();
+    }
+    else {
+      $this->cleanFile($file);
     }
 
     $entity_label = $this->getMediaEntityLabel($item);
@@ -91,7 +96,16 @@ abstract class SyncResourceMediaFileBase extends SyncResourceFileBase {
       'target_id' => $file->id(),
       'alt' => $label,
     ]);
+  }
 
+  /**
+   * Flush image file.
+   *
+   * @param \Drupal\file\FileInterface $file
+   *   The file.
+   */
+  protected function cleanFile(FileInterface $file) {
+    image_path_flush($file->getFileUri());
   }
 
 }

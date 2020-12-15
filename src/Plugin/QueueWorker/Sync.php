@@ -75,7 +75,12 @@ class Sync extends QueueWorkerBase implements ContainerFactoryPluginInterface {
     if (method_exists($plugin, $op)) {
       $item = $data['data'] ?? [];
       $item['%sync_as_job'] = TRUE;
-      $plugin->{$op}($item);
+      try {
+        $plugin->{$op}($item);
+      }
+      catch (\Exception $e) {
+        // Do nothing. Exceptions have already been handled.
+      }
     }
     else {
       $this->logger->error('[Queue Worker: %plugin_label] FAIL: %op method could not be found in %class_name.', [
