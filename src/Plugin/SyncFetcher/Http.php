@@ -52,7 +52,9 @@ class Http extends SyncFetcherBase implements ContainerFactoryPluginInterface {
     return [
       'url' => '',
       'query' => [],
+      'headers' => [],
       'as_content' => TRUE,
+      'page_key' => 'page',
     ] + parent::defaultSettings();
   }
 
@@ -114,9 +116,38 @@ class Http extends SyncFetcherBase implements ContainerFactoryPluginInterface {
   /**
    * {@inheritdoc}
    */
+  public function getHeaders() {
+    return $this->configuration['headers'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setHeaders($header) {
+    $this->configuration['headers'] = $header;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getHeaderParameter($key) {
+    return isset($this->configuration['headers'][$key]) ? $this->configuration['headers'][$key] : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setHeaderParameter($key, $value) {
+    $this->configuration['headers'][$key] = $value;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getOptions() {
     $options = [];
     $options['query'] = $this->getQuery();
+    $options['headers'] = $this->getHeaders();
     return $options;
   }
 
@@ -124,6 +155,9 @@ class Http extends SyncFetcherBase implements ContainerFactoryPluginInterface {
    * {@inheritdoc}
    */
   protected function fetch($page_number, SyncDataItems $previous_data) {
+    if ($this->isPageEnabled()) {
+      $this->setQueryParameter($this->configuration['page_key'], $page_number);
+    }
     $data = $this->httpClient->request('GET', $this->configuration['url'], $this->getOptions())->getBody();
     if ($this->configuration['as_content']) {
       $data = $data->getContents();
