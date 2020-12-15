@@ -135,3 +135,21 @@ function sync_views_query_alter(ViewExecutable $view, QueryPluginBase $query) {
     $query->addWhere('', 'watchdog.timestamp', $view->args[1], '>');
   }
 }
+
+/**
+* Implements hook_mail().
+*/
+function sync_mail($key, &$message, $params) {
+  $options = [
+    'langcode' => $message['langcode'],
+  ];
+
+  switch ($key) {
+    case 'end_fail':
+      $message['headers']['Content-Type'] = 'text/html; charset=UTF-8; format=flowed';
+      $message['from'] = \Drupal::config('system.site')->get('mail');
+      $message['subject'] = $params['%subject'];
+      $message['body'][] = $params['%message'];
+      break;
+  }
+ }

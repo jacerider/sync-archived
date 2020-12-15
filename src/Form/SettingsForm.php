@@ -6,7 +6,7 @@ use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 
 /**
- * Class SettingsForm.
+ * Class settings form.
  */
 class SettingsForm extends ConfigFormBase {
 
@@ -31,6 +31,12 @@ class SettingsForm extends ConfigFormBase {
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
     $config = $this->config('sync.settings');
+    $form['email_fail'] = [
+      '#type' => 'textfield',
+      '#title' => t('Email Failure'),
+      '#description' => t('An email will be sent to the provided email addresses when a sync reports a failure.'),
+      '#default_value' => $config->get('email_fail'),
+    ];
     $form['log_verbose'] = [
       '#type' => 'checkbox',
       '#title' => t('Verbose Logging'),
@@ -46,6 +52,7 @@ class SettingsForm extends ConfigFormBase {
     parent::submitForm($form, $form_state);
     $values = $form_state->getValues();
     $this->config('sync.settings')
+      ->set('email_fail', $values['email_fail'])
       ->set('log_verbose', $values['log_verbose'])
       ->save();
   }
