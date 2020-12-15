@@ -909,7 +909,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       ->resetProcessCount('fail');
     $this->log(LogLevel::NOTICE, '%plugin_label: Completed [Success: %success, Skip: %skip, Fail: %fail]', $context);
     \Drupal::service('plugin.manager.sync_resource')->setLastRunEnd($this->pluginDefinition);
-    if (!empty($context['%fail']) || TRUE) {
+    if (!empty($context['%fail'])) {
       $email_fail = \Drupal::config('sync.settings')->get('email_fail');
       if ($email_fail) {
         /** @var \Drupal\Core\Mail\MailManagerInterface $mail_manager */
