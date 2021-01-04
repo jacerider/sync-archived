@@ -17,6 +17,7 @@ use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\sync\SyncStorageInterface;
 use Drupal\Core\State\StateInterface;
+use Drupal\Core\Url;
 use Drupal\sync\SyncIgnoreException;
 use Psr\Log\LogLevel;
 
@@ -338,7 +339,8 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   public function build(array $context = []) {
     $context += $this->getContext();
     $this->log(LogLevel::DEBUG, '%plugin_label: Start', $this->getContext());
-    $this->queue->deleteQueue();
+    // We do not clear the queue as previous items may not have been processed.
+    // $this->queue->deleteQueue();
     $this->setStartTime();
     $this->buildJobs($context);
     return $this;
@@ -907,6 +909,19 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       ->resetProcessCount('fail');
     $this->log(LogLevel::NOTICE, '%plugin_label: Completed [Success: %success, Skip: %skip, Fail: %fail]', $context);
     \Drupal::service('plugin.manager.sync_resource')->setLastRunEnd($this->pluginDefinition);
+    if (!empty($context['%fail'])) {
+      $email_fail = \Drupal::config('sync.settings')->get('email_fail');
+      if ($email_fail) {
+        /** @var \Drupal\Core\Mail\MailManagerInterface $mail_manager */
+        $mail_manager = \Drupal::service('plugin.manager.mail');
+        $langcode = \Drupal::currentUser()->getPreferredLangcode();
+        $context['%subject'] = t('Sync Failed: %plugin_label', $context, ['langcode' => $langcode]);
+        $message = t('The %plugin_label sync had %fail failures. [Success: %success, Skip: %skip, Fail: %fail]', $context, ['langcode' => $langcode]);
+        $url = Url::fromRoute('sync.log', ['plugin_id' => $context['%plugin_id']])->setAbsolute(TRUE)->toString();
+        $context['%message'] = strip_tags($message . "\n\n" . $url);
+        $mail_manager->mail('sync', 'end_fail', $email_fail, $langcode, $context);
+      }
+    }
   }
 
   /**
