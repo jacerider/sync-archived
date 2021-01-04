@@ -8,6 +8,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\sync\Plugin\SyncResourceManager;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Render\Element;
 use Drupal\Core\Url;
 use Drupal\sync\Plugin\SyncFetcherFormInterface;
 
@@ -77,7 +78,8 @@ class SyncForm extends FormBase {
   public function buildForm(array $form, FormStateInterface $form_state) {
     $request_time = \Drupal::time()->getCurrentTime();
     $date_formatter = \Drupal::service('date.formatter');
-    $user = $this->currentUser();
+    $account = $this->currentUser();
+    $manager = $account->hasPermission('manage sync');
 
     $definitions = $this->syncResourceManager->getActiveDefinitions();
     $form['table'] = [
@@ -92,8 +94,18 @@ class SyncForm extends FormBase {
         'log' => $this->t('Log'),
       ],
     ];
+    if (!$manager) {
+      unset($form['table']['#header']['cleanup']);
+    }
+    $has_cron = FALSE;
     foreach ($definitions as $definition) {
       if (!empty($definition['no_ui'])) {
+        continue;
+      }
+      $next = $this->syncResourceManager->getNextCronTime($definition);
+      $computed = !empty($definition['computed']);
+      $enable = $this->syncResourceManager->access($definition, $account);
+      if (!$enable && !$this->syncResourceManager->access($definition, $account, 'view')) {
         continue;
       }
       /** @var \Drupal\sync\Plugin\SyncResourceInterface $resource */
@@ -113,10 +125,11 @@ class SyncForm extends FormBase {
           '@bundle' => isset($bundle_definitions[$definition['bundle']]) ? $bundle_definitions[$definition['bundle']]['label'] : 'None Specified',
         ] + $context;
       }
-      $computed = !empty($definition['computed']);
       $row = [];
       $row['label']['#markup'] = $this->t('<strong>@label</strong> <small>(@id)</small><br><small>Entity: @entity<br>Bundle: @bundle</small>', $context);
-      $row['clean']['#markup'] = '<small>' . (!empty($definition['cleanup']) ? $this->t('Yes') : $this->t('No')) . '</small>';
+      if ($manager) {
+        $row['clean']['#markup'] = '<small>' . (!empty($definition['cleanup']) ? $this->t('Yes') : $this->t('No')) . '</small>';
+      }
       $row['times']['#markup'] = '-';
       $row['next']['#markup'] = '-';
       if (($times = $this->syncResourceManager->getCronTimes($definition)) && ($days = $this->syncResourceManager->getCronDays($definition))) {
@@ -126,8 +139,8 @@ class SyncForm extends FormBase {
           return date('D', strtotime($time));
         }, $days)) . '</small>';
       }
-      $next = $this->syncResourceManager->getNextCronTime($definition);
       if ($next) {
+        $has_cron = TRUE;
         if ($next < $request_time) {
           $row['next']['#markup'] = '<small>Next Run</small>';
         }
@@ -141,14 +154,12 @@ class SyncForm extends FormBase {
         '%start' => $last_run_start ? $date_formatter->format($last_run_start) : '-',
         '%end' => $last_run_end ? $date_formatter->format($last_run_end) : '-',
       ]);
-      $enable = $user->hasPermission('sync run all');
-      if (!$enable && $next) {
-        $enable = $user->hasPermission('sync run scheduled');
-      }
-      if ($computed) {
-        $enable = FALSE;
-      }
-      $row['actions'] = ['#type' => 'actions', '#attributes' => ['style' => 'white-space: nowrap;']];
+      $row['actions'] = [
+        '#type' => 'actions',
+        '#attributes' => [
+          'style' => 'white-space: nowrap;',
+        ],
+      ];
       $action = ['::sync'];
       if ($as_form) {
         $action = ['::asForm'];
@@ -157,12 +168,12 @@ class SyncForm extends FormBase {
         '#type' => 'submit',
         '#name' => 'action_' . $definition['id'],
         '#button_type' => 'primary',
-        '#value' => (string) $this->t('Sync', ['@label' => $definition['label']]),
+        '#value' => (string) $this->t('Sync'),
         '#disabled' => !$enable,
         '#plugin_id' => $definition['id'],
         '#submit' => $action,
       ];
-      if (!empty($definition['reset']) && $user->hasPermission('sync reset')) {
+      if (!empty($definition['reset']) && $account->hasPermission('sync reset')) {
         $row['actions']['reset'] = [
           '#type' => 'submit',
           '#name' => 'reset_' . $definition['id'],
@@ -177,7 +188,7 @@ class SyncForm extends FormBase {
         '#title' => $this->t('Log'),
         '#url' => Url::fromRoute('sync.log', ['plugin_id' => $definition['id']]),
       ];
-      if ($user->hasPermission('sync debug')) {
+      if ($account->hasPermission('sync debug')) {
         $form['table']['#header']['devel'] = $this->t('Debug');
         $row['devel'] = [
           '#type' => 'submit',
@@ -188,6 +199,13 @@ class SyncForm extends FormBase {
         ];
       }
       $form['table'][$definition['id']] = $row;
+    }
+    foreach (Element::children($form['table']) as $key) {
+      $row = &$form['table'][$key];
+      if (!$has_cron) {
+        unset($form['table']['#header']['times'], $form['table']['#header']['next']);
+        unset($row['times'], $row['next']);
+      }
     }
     return $form;
   }

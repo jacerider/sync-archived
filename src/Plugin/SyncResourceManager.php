@@ -5,6 +5,7 @@ namespace Drupal\sync\Plugin;
 use Drupal\Core\Plugin\DefaultPluginManager;
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
+use Drupal\Core\Session\AccountInterface;
 
 /**
  * Provides the Sync Resource plugin manager.
@@ -105,6 +106,40 @@ class SyncResourceManager extends DefaultPluginManager {
       return $this->createInstance($resource_id);
     }
     return NULL;
+  }
+
+  /**
+   * Check access for a definition.
+   *
+   * @param array $definition
+   *   The resource definition.
+   * @param \Drupal\Core\Session\AccountInterface $account
+   *   The account to check permissions for.
+   * @param string $op
+   *   The operation.
+   *
+   * @return bool
+   *   TRUE if access is granted.
+   */
+  public function access(array $definition, AccountInterface $account, $op = 'update') {
+    if (!empty($definition['computed'])) {
+      return FALSE;
+    }
+    switch ($op) {
+      case 'update':
+        $enable = $account->hasPermission('sync run all') || $account->hasPermission('sync run ' . $definition['id']);
+        if (!$enable) {
+          $enable = $this->getNextCronTime($definition) && $account->hasPermission('sync run scheduled');
+        }
+        return $enable;
+
+      case 'view':
+        if ($account->hasPermission('sync view all')) {
+          return TRUE;
+        }
+        break;
+    }
+    return FALSE;
   }
 
   /**

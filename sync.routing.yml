@@ -32,6 +32,7 @@ sync.fetcher.form:
     _form: '\Drupal\sync\Form\SyncFetcherForm'
     _title: 'Perform Sync'
   requirements:
-    _permission: 'access sync overview'
+    _sync_resource_access: 'plugin_id.update'
+    # _permission: 'access sync overview'
   options:
     _admin_route: TRUE

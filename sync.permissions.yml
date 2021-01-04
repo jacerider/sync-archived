@@ -12,3 +12,7 @@
   title: 'Allow sync reset'
 'sync debug':
   title: 'Allow sync debug'
+'sync view all':
+  title: 'Allow viewing all the sync resources.'
+permission_callbacks:
+  - \Drupal\sync\SyncPermissions::permissions

@@ -5,6 +5,7 @@ namespace Drupal\sync\Form;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Session\AccountInterface;
 use Drupal\sync\Plugin\SyncFetcherFormInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\sync\Plugin\SyncFetcherManager;
