@@ -158,6 +158,7 @@ class Http extends SyncFetcherBase implements ContainerFactoryPluginInterface {
     if ($this->isPageEnabled()) {
       $this->setQueryParameter($this->configuration['page_key'], $page_number);
     }
+    ksm($this->configuration['url']);
     $data = $this->httpClient->request('GET', $this->configuration['url'], $this->getOptions())->getBody();
     if ($this->configuration['as_content']) {
       $data = $data->getContents();
