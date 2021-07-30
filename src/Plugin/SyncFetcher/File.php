@@ -21,6 +21,7 @@ class File extends SyncFetcherBase {
   protected function defaultSettings() {
     return [
       'path' => '',
+      'remote' => FALSE,
     ] + parent::defaultSettings();
   }
 
@@ -32,7 +33,7 @@ class File extends SyncFetcherBase {
     if (strpos($this->configuration['path'], '://') === FALSE) {
       $filepath = \Drupal::root() . '/' . $filepath;
     }
-    if (!file_exists($filepath)) {
+    if (empty($this->configuration['remote']) && !file_exists($filepath)) {
       $message = t('The file %filepath could not be found.', [
         '%filepath' => $filepath,
       ]);
