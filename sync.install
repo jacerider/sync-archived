@@ -106,7 +106,7 @@ function sync_update_8002() {
   $database = Database::getConnection();
   $sql = "SHOW COLUMNS FROM `sync_data` LIKE 'group';";
   if ($database->query($sql)->fetchAssoc()) {
-    $sql = 'ALTER TABLE sync_data RENAME COLUMN `group` TO `segment`;';
+    $sql = 'ALTER TABLE {sync_data} RENAME COLUMN `group` TO `segment`;';
     $database->query($sql);
   }
 }
