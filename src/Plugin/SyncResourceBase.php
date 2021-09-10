@@ -587,10 +587,10 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * {@inheritdoc}
    */
-  public function manualProcessMultiple(array $datas) {
+  public function manualProcessMultiple(array $items) {
     $results = [];
-    foreach ($datas as $data) {
-      if ($result = $this->manualProcess($data)) {
+    foreach ($items as $item) {
+      if ($result = $this->manualProcess($item)) {
         $results[] = $result;
       }
     }
@@ -600,11 +600,17 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   /**
    * {@inheritdoc}
    */
-  public function manualProcess() {
+  public function manualProcess(SyncDataItem $extend_item = NULL) {
     try {
       $results = [];
       $data = $this->fetchData();
       foreach ($data as $item) {
+        /** @var \Drupal\sync\Plugin\SyncDataItem $item */
+        if ($extend_item) {
+          foreach ($extend_item as $key => $value) {
+            $item->set($key, $value);
+          }
+        }
         $result = $this->doProcess([
           'item' => $item,
           'context' => $this->getContext(),
@@ -1174,6 +1180,13 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   protected function resetProcessCount($type = 'success') {
     $this->state->delete($this->getStateKey() . '.process.' . $type);
     return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function resetLastRun() {
+    SyncResourceManager::resetLastRun($this->getPluginDefinition());
   }
 
   /**

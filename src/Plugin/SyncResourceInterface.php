@@ -55,10 +55,13 @@ interface SyncResourceInterface extends PluginInspectionInterface {
   /**
    * The job called for each item of a sync.
    *
+   * @param \Drupal\sync\Plugin\SyncDataItem $extend_item
+   *   An item to add to all processed items.
+   *
    * @return \Drupal\core\Entity\EntityInterface[]
    *   An array of created/updated entities.
    */
-  public function manualProcess();
+  public function manualProcess(SyncDataItem $extend_item = NULL);
 
   /**
    * Fetch the data and create jobs.
@@ -102,5 +105,10 @@ interface SyncResourceInterface extends PluginInspectionInterface {
    *   A collection of items.
    */
   public function fetchData(SyncDataItems $previous_data = NULL);
+
+  /**
+   * Method called when resetting plugin.
+   */
+  public function resetLastRun();
 
 }
