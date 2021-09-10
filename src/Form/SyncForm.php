@@ -173,7 +173,7 @@ class SyncForm extends FormBase {
         '#plugin_id' => $definition['id'],
         '#submit' => $action,
       ];
-      if (!empty($definition['reset']) && $account->hasPermission('sync reset')) {
+      if (!empty($definition['reset']) && $account->hasPermission('sync reset') && SyncResourceManager::getLastRunStart($definition)) {
         $row['actions']['reset'] = [
           '#type' => 'submit',
           '#name' => 'reset_' . $definition['id'],
