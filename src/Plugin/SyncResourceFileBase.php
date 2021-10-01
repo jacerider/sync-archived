@@ -112,6 +112,16 @@ abstract class SyncResourceFileBase extends SyncResourceBase {
         file_move($entity, $destination, $replace);
         $entity->setFileUri($destination);
         $entity->save();
+        if (\Drupal::moduleHandler()->moduleExists('crop')) {
+          $crops = \Drupal::entityTypeManager()
+            ->getStorage('crop')
+            ->loadByProperties(['uri' => $entity->getFileUri() . '.jpg']);
+          foreach ($crops as $crop) {
+            /** @var \Drupal\crop\CropInterface $crop */
+            $crop->set('uri', $destination);
+            $crop->save();
+          }
+        }
       }
     }
   }
