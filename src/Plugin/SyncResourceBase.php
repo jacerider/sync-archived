@@ -396,7 +396,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $this->queue->createItem([
       'plugin_id' => $this->getPluginId(),
       'op' => 'doStart',
-      'no_count' => TRUE,
       'data' => $context,
     ]);
   }
@@ -436,7 +435,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
     $this->queue->createItem([
       'plugin_id' => $this->getPluginId(),
       'op' => 'doPage',
-      'no_count' => TRUE,
       'data' => [
         'items' => $items,
         'context' => $context,
@@ -459,7 +457,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $this->queue->createItem([
         'plugin_id' => $this->getPluginId(),
         'op' => 'doCleanup',
-        'no_count' => TRUE,
         'data' => $context,
       ]);
     }
@@ -467,7 +464,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $this->queue->createItem([
         'plugin_id' => $this->getPluginId(),
         'op' => 'doEnd',
-        'no_count' => TRUE,
         'data' => $context,
       ]);
     }
@@ -495,33 +491,18 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       try {
         $queue_worker->processItem($item->data);
         $this->queue->deleteItem($item);
-        if (empty($item->data['no_count'])) {
-          $this->incrementProcessCount('success');
-        }
       }
       catch (SyncIgnoreException $e) {
         $this->queue->deleteItem($item);
-        if (empty($item->data['no_count'])) {
-          $this->incrementProcessCount('skip');
-        }
       }
       catch (SyncSkipException $e) {
         $this->queue->deleteItem($item);
-        if (empty($item->data['no_count'])) {
-          $this->incrementProcessCount('skip');
-        }
       }
       catch (SyncFailException $e) {
         $this->queue->deleteItem($item);
-        if (empty($item->data['no_count'])) {
-          $this->incrementProcessCount('fail');
-        }
       }
       catch (\Exception $e) {
         $this->queue->deleteItem($item);
-        if (empty($item->data['no_count'])) {
-          $this->incrementProcessCount('fail');
-        }
       }
     }
     return $this;
@@ -671,6 +652,7 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
           $success = $this->saveItem($entity, $item);
           $context['%bundle'] = $entity->getEntityTypeId();
           $context['%entity_id'] = $entity->id();
+          $this->incrementProcessCount('success');
           switch ($success) {
             case SAVED_NEW:
               $this->log(LogLevel::INFO, '%plugin_label: NEW: %id -> %entity_type:%entity_id', $context);
@@ -698,7 +680,10 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       if ($entity && !$entity->isNew()) {
         $this->syncStorage->saveEntity($entity);
       }
-      throw new SyncIgnoreException($e->getMessage());
+      $this->incrementProcessCount('skip');
+      if (empty($data['%sync_as_job'])) {
+        throw new SyncIgnoreException($e->getMessage());
+      }
     }
     catch (SyncSkipException $e) {
       if ($entity && !$entity->isNew()) {
@@ -706,7 +691,10 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::WARNING, '%plugin_label: %id: Process Item Skip: %error', $context);
-      throw new SyncSkipException($e->getMessage());
+      $this->incrementProcessCount('skip');
+      if (empty($data['%sync_as_job'])) {
+        throw new SyncSkipException($e->getMessage());
+      }
     }
     catch (SyncFailException $e) {
       if ($entity && !$entity->isNew()) {
@@ -714,7 +702,10 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::ERROR, '%plugin_label: %id: Process Item Fail: %error', $context);
-      throw new SyncFailException($e->getMessage());
+      $this->incrementProcessCount('fail');
+      if (empty($data['%sync_as_job'])) {
+        throw new SyncFailException($e->getMessage());
+      }
     }
     catch (\Exception $e) {
       if ($entity && !$entity->isNew()) {
@@ -722,7 +713,10 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       }
       $context['%error'] = $e->getMessage();
       $this->log(LogLevel::ERROR, '%plugin_label: %id: Process Item Error: %error', $context);
-      throw new \Exception($e->getMessage());
+      $this->incrementProcessCount('fail');
+      if (empty($data['%sync_as_job'])) {
+        throw new \Exception($e->getMessage());
+      }
     }
   }
 
@@ -814,7 +808,6 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
       $this->queue->createItem([
         'plugin_id' => $this->getPluginId(),
         'op' => 'doEnd',
-        'no_count' => TRUE,
         'data' => $context,
       ]);
       if (!empty($context['%sync_as_batch'])) {
