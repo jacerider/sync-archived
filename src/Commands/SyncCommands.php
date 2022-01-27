@@ -85,6 +85,7 @@ class SyncCommands extends DrushCommands {
           ->execute();
       }
       else {
+        // Always purge queue when running as command.
         $queue->deleteQueue();
         $instance->build();
       }

@@ -60,6 +60,7 @@ function drush_sync($resource_id = NULL) {
         ->execute();
     }
     else {
+      // Always purge queue when running as command.
       $queue->deleteQueue();
       $instance->build();
     }

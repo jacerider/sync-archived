@@ -339,8 +339,10 @@ abstract class SyncResourceBase extends PluginBase implements SyncResourceInterf
   public function build(array $context = []) {
     $context += $this->getContext();
     $this->log(LogLevel::DEBUG, '%plugin_label: Start', $this->getContext());
-    // We do not clear the queue as previous items may not have been processed.
-    // $this->queue->deleteQueue();
+    if ($this->usesCleanup()) {
+      // Only clean the queue if we use cleanup.
+      $this->queue->deleteQueue();
+    }
     $this->setStartTime();
     $this->buildJobs($context);
     return $this;
